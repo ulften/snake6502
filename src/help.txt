@@ -1,2 +1,14 @@
-This information is displayed with the HELP and INFO monitor commands.
-Please change it to suit your project.
+SNAKE for the Picocomputer 6502
+
+Steer the snake to the apples. Each apple makes it longer and leaves a
+stone behind. Don't hit a wall, a stone or yourself. The snake gets
+faster as you go, and a golden apple worth 5 points shows up now and
+then for a few seconds.
+
+  A      turn left (relative to the head)
+  D      turn right
+  P      pause / resume
+  SPACE  start
+  ESC    quit
+
+The high score is saved in snake.hi on the USB drive.
