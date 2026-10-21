@@ -63,8 +63,10 @@ The game ends up in `build/cc65/release/snake.rp6502`.
 
 ## How it works
 
-Everything is in [src/main.c](src/main.c), and the comment at the top
-explains how the game was built up step by step. In short:
+The game itself is in [src/main.c](src/main.c), and the comment at the top
+explains how it was built up step by step and lists the other source files
+(graphics, grass, sound, keyboard, score row, high score, logging). The XRAM
+map is in [src/xram.h](src/xram.h). In short:
 
 - **Graphics:** a 40x30 tile map (VGA mode 2, 8x8 tiles, 16 colors), a text
   row on top for the score (mode 1), and two sprites for the snake's head
