@@ -1,5 +1,14 @@
 /*
- * Snake för Picocomputer 6502 - steg 5: fart, rekord och guldäpple
+ * Snake för Picocomputer 6502 - steg 6: stenarna växer, game over och paus
+ *
+ * Nytt i steg 6:
+ *  - Antalet stenar från äpplen som får ligga kvar börjar på STONE_START och
+ *    ökar med en för vart STONE_GROW:e äpple, upp till STONE_MAX.
+ *  - När ormen dör skakar planet (x_pos i tile-konfigurationen ändras) och
+ *    ormen blinkar vitt (färgerna 5 och 7 i båda paletterna).
+ *  - P pausar och fortsätter spelet.
+ *
+ * Steg 5: fart, rekord och guldäpple
  *
  * Nytt i steg 5:
  *  - Ormen blir snabbare: ett steg tar STEP_START bildrutor från början och
@@ -22,8 +31,9 @@
  * Steg 3c: stenar bakom svansen
  *
  * Nytt i 3c: var STONE_EVERY:e äpple ger en sten som landar i cellen som
- * svansen lämnar. Den avslöjas när svansspriten glider bort. Högst STONE_MAX
- * sådana stenar finns kvar på planen; när en ny kommer blir den äldsta gräs.
+ * svansen lämnar. Den avslöjas när svansspriten glider bort. Bara ett visst
+ * antal sådana stenar finns kvar på planen; när en ny kommer blir den äldsta
+ * gräs.
  *
  * Steg 3b: sprites för huvud och svans
  *
@@ -55,7 +65,7 @@
  *  - Murarna glöder och äpplet blänker: vi ändrar enstaka färger i paletten
  *    (2 byte per färg). Hela skärmen byter färg utan att kartan ritas om.
  *
- * Styrning:  A = sväng vänster, D = sväng höger, ESC = avsluta
+ * Styrning:  A = sväng vänster, D = sväng höger, P = paus, ESC = avsluta
  *
  * Grafiken är nu två "plan" som VGA lägger ovanpå varandra:
  *   plan 0: tile map (mode 2). 40x30 celler, 1 byte per cell = tile-nummer.
@@ -145,6 +155,7 @@
 #define KEY_D 0x07
 #define KEY_ESC 0x29
 #define KEY_SPACE 0x2C
+#define KEY_P 0x13
 
 /* Byt plats på dessa två om du vill ha A = höger och D = vänster */
 #define KEY_TURN_LEFT KEY_A
@@ -152,7 +163,9 @@
 
 /* ---------- spelinställningar ---------- */
 #define NUM_STONES 8   /* stenar som finns från början */
-#define STONE_MAX 6    /* högst så många stenar från äpplen åt gången */
+#define STONE_START 4  /* så många stenar från äpplen får ligga kvar i början */
+#define STONE_GROW 5   /* en sten till får ligga kvar för vart 5:e äpple */
+#define STONE_MAX 20   /* men aldrig fler än så här */
 #define STONE_EVERY 1  /* en sten per så här många äpplen */
 #define STEP_START 8   /* bildrutor per steg i början (lägre = snabbare) */
 #define STEP_MIN 4     /* snabbaste farten */
@@ -862,12 +875,16 @@ static void sfx_update(void)
     }
 }
 
-/* Lägger en sten i cellen (x,y). Är kön full blir den äldsta stenen gräs. */
+/* Lägger en sten i cellen (x,y). Är kön full blir den äldsta stenen gräs.
+   Kön får bli längre ju fler äpplen ormen har ätit. */
 static void drop_stone(unsigned char x, unsigned char y)
 {
     unsigned char i;
+    unsigned limit = STONE_START + apples / STONE_GROW;
 
-    if (stq_count == STONE_MAX)
+    if (limit > STONE_MAX)
+        limit = STONE_MAX;
+    while (stq_count >= limit)
     {
         put_tile(stq_x[stq_first], stq_y[stq_first],
                  grass_tile(stq_x[stq_first], stq_y[stq_first]));
@@ -911,6 +928,75 @@ static void animate(void)
     }
 }
 
+/* Ormens färger (5 = kropp, 7 = huvud/glans) i båda paletterna.
+   flash = 1 gör ormen vit, 0 återställer. Färg 6 rörs inte, den är gräsrot. */
+static void snake_color(unsigned char flash)
+{
+    unsigned char i;
+    for (i = 5; i <= 7; i += 2)
+    {
+        if (flash)
+        {
+            set_color_at(PAL_XRAM, i, 255, 255, 255);
+            set_color_at(SPR_PAL, i, 255, 255, 255);
+        }
+        else
+        {
+            set_color_at(PAL_XRAM, i, pal[i][0], pal[i][1], pal[i][2]);
+            set_color_at(SPR_PAL, i, pal[i][0], pal[i][1], pal[i][2]);
+        }
+    }
+}
+
+/* Flyttar tile-planet i sidled (x_pos i mode2-konfigurationen) */
+static void shake(signed char s)
+{
+    RIA.addr0 = CFG_TILES + 2;
+    RIA.step0 = 1;
+    RIA.rw0 = (unsigned char)s;
+    RIA.rw0 = s < 0 ? 0xFF : 0x00;
+}
+
+/* När ormen dör: planet skakar allt mindre och ormen blinkar en stund */
+static void game_over_fx(void)
+{
+    unsigned char i, amp;
+
+    for (i = 0; i < 48; i++)
+    {
+        wait_vsync();
+        animate();
+        snake_color((i >> 2) & 1);
+        amp = i < 16 ? 4 - (i >> 2) : 0; /* 4, 3, 2, 1, sedan stilla */
+        shake((i & 1) ? amp : -(signed char)amp);
+    }
+    snake_color(0);
+    shake(0);
+}
+
+/* Pausar tills P trycks igen. Returnerar 0 om spelaren tryckte ESC.
+   Bakgrunden lever vidare men guldäpplets tid står still. */
+static unsigned char pause_game(void)
+{
+    unsigned char p, prev_p = 1; /* P är nedtryckt när vi kommer hit */
+
+    status("PAUSED  P = GO ON");
+    for (;;)
+    {
+        wait_vsync();
+        animate();
+        read_keys();
+        if (KEY_DOWN(KEY_ESC))
+            return 0;
+        p = KEY_DOWN(KEY_P);
+        if (p && !prev_p)
+            break;
+        prev_p = p;
+    }
+    status("A/D TURN  P PAUSE");
+    return 1;
+}
+
 /* ---------- spelet ---------- */
 
 /* Returnerar 0 om spelaren tryckte ESC, 1 om ormen dog */
@@ -921,7 +1007,7 @@ static unsigned char play(void)
     unsigned char turn = 0;
     unsigned char frames = 0;
     unsigned char started = 0; /* huvudet glider först efter första steget */
-    unsigned char a, d, prev_a, prev_d;
+    unsigned char a, d, p, prev_a, prev_d, prev_p;
     unsigned char hx, hy, nx, ny, t;
     unsigned char vx = 20, vy = 15; /* cellen huvudspriten glider ifrån */
     unsigned char tx = 18, ty = 15; /* cellen svansspriten glider ifrån */
@@ -931,7 +1017,7 @@ static unsigned char play(void)
     unsigned char step = STEP_START; /* bildrutor per steg, minskar med farten */
 
     draw_board();
-    status("A/D TURN  ESC QUIT");
+    status("A/D TURN  P PAUSE");
 
     head = tail = 0;
     sx[0] = 18; sy[0] = 15;
@@ -956,6 +1042,7 @@ static unsigned char play(void)
     read_keys();
     prev_a = KEY_DOWN(KEY_TURN_LEFT);
     prev_d = KEY_DOWN(KEY_TURN_RIGHT);
+    prev_p = KEY_DOWN(KEY_P);
 
     for (;;)
     {
@@ -966,6 +1053,11 @@ static unsigned char play(void)
 
         if (KEY_DOWN(KEY_ESC))
             return 0;
+
+        p = KEY_DOWN(KEY_P);
+        if (p && !prev_p && !pause_game())
+            return 0;
+        prev_p = p;
 
         a = KEY_DOWN(KEY_TURN_LEFT);
         d = KEY_DOWN(KEY_TURN_RIGHT);
@@ -997,6 +1089,7 @@ static unsigned char play(void)
             if (t == T_WALL || t == T_BODY || t == T_OCC || t == T_STONE)
             {
                 sfx_over();
+                game_over_fx();
                 return 1;
             }
 
@@ -1030,7 +1123,7 @@ static unsigned char play(void)
                     bonus_color(1);
                 }
                 show_score();
-                log_num("score", score);
+                //log_num("score", score);
                 tx = sx[tail];
                 ty = sy[tail];
                 tdx = 0;
