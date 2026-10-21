@@ -10,7 +10,7 @@
 /* Insert xram.h snippets from docs to build your system. */
 /* https://picocomputer.github.io/sdk.html#xram-memory-map */
 
-/* XREG-genvägar, hämtade från RIA- och VGA-dokumentationen */
+/* XREG shortcuts, taken from the RIA and VGA documentation */
 #define xreg_ria_keyboard(...) xreg(0, 0, 0, __VA_ARGS__)
 #define xreg_vga_canvas(...)   xreg(1, 0, 0, __VA_ARGS__)
 #define xreg_vga_mode(...)     xreg(1, 0, 1, __VA_ARGS__)

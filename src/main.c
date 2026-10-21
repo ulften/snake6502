@@ -1,88 +1,93 @@
 /*
- * Snake för Picocomputer 6502 - steg 6: stenarna växer, game over och paus
+ * Snake for the Picocomputer 6502 - step 6: growing stones, game over, pause
  *
- * Nytt i steg 6:
- *  - Antalet stenar från äpplen som får ligga kvar börjar på STONE_START och
- *    ökar med en för vart STONE_GROW:e äpple, upp till STONE_MAX.
- *  - När ormen dör skakar planet (x_pos i tile-konfigurationen ändras) och
- *    ormen blinkar vitt (färgerna 5 och 7 i båda paletterna).
- *  - P pausar och fortsätter spelet.
+ * New in step 6:
+ *  - The number of stones from apples that may stay on the board starts at
+ *    STONE_START and grows by one every STONE_GROW apples, up to STONE_MAX.
+ *  - When the snake dies the board shakes (x_pos in the tile config changes)
+ *    and the snake flashes white (colors 5 and 7 in both palettes).
+ *  - P pauses and resumes the game.
  *
- * Steg 5: fart, rekord och guldäpple
+ * Step 5: speed, high score and golden apple
  *
- * Nytt i steg 5:
- *  - Ormen blir snabbare: ett steg tar STEP_START bildrutor från början och
- *    en bildruta mindre var SPEEDUP_EVERY:e äpple, ner till STEP_MIN.
- *  - Rekordet visas på poängraden och sparas i HISCORE_FILE på USB-disken.
- *  - Guldäpplet: efter vart BONUS_EVERY:e äpple dyker det upp ett guldäpple
- *    värt BONUS_POINTS. Det försvinner efter BONUS_FRAMES bildrutor och
- *    blinkar (via paletten) innan dess.
+ * New in step 5:
+ *  - The snake speeds up: a step takes STEP_START frames at first and one
+ *    frame less every SPEEDUP_EVERY apples, down to STEP_MIN.
+ *  - The high score is shown on the score row and saved in HISCORE_FILE on
+ *    the USB drive.
+ *  - The golden apple: after every BONUS_EVERY apples a golden apple worth
+ *    BONUS_POINTS appears. It disappears after BONUS_FRAMES frames and
+ *    blinks (via the palette) before that.
  *
- * Steg 4: ljud (PSG)
+ * Step 4: sound (PSG)
  *
- * Nytt i steg 4: ljudgeneratorn PSG (8 kanaler) styrs genom 64 byte i XRAM,
- * precis som tangentbordet och spritelistan. Tre ljudeffekter:
- *  - äta äpple: kort fyrkantsvåg med stigande tonhöjd
- *  - sten landar: ett kort brus ("duns")
- *  - game over: sågtandsvåg med fallande tonhöjd
- * Ljuden startas med gate = 1 och klingar ut när gate sätts till 0.
- * sfx_update() körs varje bildruta och sköter tonhöjd och gate.
+ * New in step 4: the PSG sound generator (8 channels) is controlled through
+ * 64 bytes in XRAM, just like the keyboard and the sprite list. Three sound
+ * effects:
+ *  - eating an apple: short square wave with rising pitch
+ *  - a stone lands: a short burst of noise ("thud")
+ *  - game over: sawtooth wave with falling pitch
+ * A sound starts with gate = 1 and fades out when gate is set to 0.
+ * sfx_update() runs every frame and handles pitch and gate.
  *
- * Steg 3c: stenar bakom svansen
+ * Step 3c: stones behind the tail
  *
- * Nytt i 3c: var STONE_EVERY:e äpple ger en sten som landar i cellen som
- * svansen lämnar. Den avslöjas när svansspriten glider bort. Bara ett visst
- * antal sådana stenar finns kvar på planen; när en ny kommer blir den äldsta
- * gräs.
+ * New in 3c: every STONE_EVERY apples gives a stone that lands in the cell
+ * the tail leaves. It is revealed as the tail sprite slides away. Only a
+ * limited number of such stones stay on the board; when a new one arrives
+ * the oldest turns back into grass.
  *
- * Steg 3b: sprites för huvud och svans
+ * Step 3b: sprites for head and tail
  *
- * Ändringar jämfört med steg 3:
- *  - Svansen är också en sprite. När svansen lämnar en cell sätts kartan till
- *    gräs direkt, men en kropps-sprite glider från den cellen till nästa
- *    segment. Då rör sig båda ändarna av ormen mjukt (mitten står stilla
- *    mellan stegen, precis som hos en riktig orm).
- *  - Stenar (T_STONE) som ormen måste undvika. Antal styrs av NUM_STONES.
- *  - Poängraden fylls med blanksteg så att gamla siffror inte blir kvar.
+ * Changes compared to step 3:
+ *  - The tail is also a sprite. When the tail leaves a cell the map is set
+ *    to grass right away, but a body sprite slides from that cell to the
+ *    next segment. That way both ends of the snake move smoothly (the middle
+ *    stands still between steps, just like a real snake).
+ *  - Stones (T_STONE) that the snake must avoid. NUM_STONES sets how many.
+ *  - The score row is padded with spaces so that old digits don't linger.
  *
- * Steg 3:
+ * Step 3:
  *
- * Nytt i steg 3:
- *  - Ormens huvud är en sprite (mode 5, 4 bitar, 8x8) som glider en pixel per
- *    bildruta mellan cellerna, i stället för att hoppa en hel cell åt gången.
- *    Spelets logik går fortfarande i hela celler, men VGA ritar sprite-lagret
- *    ovanpå tile-kartan utan att 6502:an ritar om något.
- *  - Spriten använder samma bilder som huvud-tiles (samma format i XRAM) men
- *    en egen palett där färg 0 är genomskinlig.
- *  - Huvudets cell i kartan är T_OCC: en tile som ser ut som gräs men räknas
- *    som upptagen. Äpplet ligger kvar i kartan tills huvudet har glidit dit.
+ * New in step 3:
+ *  - The snake's head is a sprite (mode 5, 4 bits, 8x8) that slides one
+ *    pixel per frame between cells instead of jumping a whole cell at a time.
+ *    The game logic still works in whole cells, but VGA draws the sprite
+ *    layer on top of the tile map without the 6502 redrawing anything.
+ *  - The sprite uses the same images as the head tiles (same format in XRAM)
+ *    but its own palette where color 0 is transparent.
+ *  - The head's cell in the map is T_OCC: a tile that looks like grass but
+ *    counts as occupied. The apple stays in the map until the head has slid
+ *    onto it.
  *
- * Från steg 2 (jämfört med steg 1):
- *  - Vind i gräset: planen är delad i 16 diagonala band med egna tile-nummer.
- *    En vindpust sveper från band till band och stråna böjer sig när den
- *    passerar. Eftersom kartan bara pekar på tile-numret räcker det att skriva
- *    om tile-bilderna för de band som ändras, kartan ritas aldrig om.
- *  - Murarna glöder och äpplet blänker: vi ändrar enstaka färger i paletten
- *    (2 byte per färg). Hela skärmen byter färg utan att kartan ritas om.
+ * From step 2 (compared to step 1):
+ *  - Wind in the grass: the board is split into 16 diagonal bands with their
+ *    own tile numbers. A gust sweeps from band to band and the blades bend as
+ *    it passes. Since the map only points at tile numbers, it is enough to
+ *    rewrite the tile images of the bands that change; the map is never
+ *    redrawn.
+ *  - The walls glow and the apple glints: we change single colors in the
+ *    palette (2 bytes per color). The whole screen changes color without
+ *    redrawing the map.
  *
- * Styrning:  A = sväng vänster, D = sväng höger, P = paus, ESC = avsluta
+ * Controls:  A = turn left, D = turn right, P = pause, ESC = quit
  *
- * Grafiken är nu två "plan" som VGA lägger ovanpå varandra:
- *   plan 0: tile map (mode 2). 40x30 celler, 1 byte per cell = tile-nummer.
- *           Tiles är 8x8 pixlar, 4 bitar per pixel (16 färger), 32 byte styck.
- *   plan 1: text (mode 1, 1 bit färg) bara på översta raden, för poängen.
+ * The graphics are two "planes" that VGA stacks on top of each other:
+ *   plane 0: tile map (mode 2). 40x30 cells, 1 byte per cell = tile number.
+ *            Tiles are 8x8 pixels, 4 bits per pixel (16 colors), 32 bytes each.
+ *   plane 1: text (mode 1, 1-bit color) on the top row only, for the score.
  *
- * Allt ligger i XRAM. VGA läser det direkt varje bildruta:
- *   0x1000  textrad (40 byte)
- *   0x1100  tile map (1200 byte)
- *   0x2000  tile-bilder (32 byte per tile)
- *   0xFF00  tangentbord (32 byte)
- *   0xFF40  konfiguration för tile map (16 byte)
- *   0xFF50  konfiguration för textraden (16 byte)
- *   0xFF80  palett (16 färger * 2 byte)
- *   0xFFA0  spritepalett (som ovan, men färg 0 genomskinlig)
- *   0xFFC0  spritelista (2 sprites * 8 byte: 0 = svans, 1 = huvud)
- *   0xFE00  PSG, ljudgeneratorn (8 kanaler * 8 byte)
+ * Everything lives in XRAM. VGA reads it directly every frame:
+ *   0x1000  text row (40 bytes)
+ *   0x1100  tile map (1200 bytes)
+ *   0x2000  tile images (32 bytes per tile)
+ *   0xFF00  keyboard (32 bytes)
+ *   0xFF40  tile map config (16 bytes)
+ *   0xFF50  text row config (16 bytes)
+ *   0xFF80  palette (16 colors * 2 bytes)
+ *   0xFFA0  sprite palette (as above, but color 0 transparent)
+ *   0xFFC0  sprite list (2 sprites * 8 bytes: 0 = tail, 1 = head)
+ *   0xFE00  PSG, the sound generator (8 channels * 8 bytes)
  */
 
 #include <rp6502.h>
@@ -92,14 +97,14 @@
 #include <string.h>
 #include <unistd.h>
 
-/* XREG-genvägar, hämtade från RIA- och VGA-dokumentationen */
+/* XREG shortcuts, taken from the RIA and VGA documentation */
 #define xreg_ria_keyboard(...) xreg(0, 0, 0, __VA_ARGS__)
 #define xreg_vga_canvas(...) xreg(1, 0, 0, __VA_ARGS__)
 #define xreg_vga_mode(...) xreg(1, 0, 1, __VA_ARGS__)
 #define xreg_vga_mode5(...) xreg(1, 0, 1, 5, __VA_ARGS__)
 #define xreg_ria_psg(...) xreg(0, 1, 0, __VA_ARGS__)
 
-/* ---------- XRAM-karta ---------- */
+/* ---------- XRAM map ---------- */
 #define TEXT_XRAM 0x1000
 #define MAP_XRAM 0x1100
 #define TILES_XRAM 0x2000
@@ -109,89 +114,89 @@
 #define PAL_XRAM 0xFF80
 #define SPR_PAL 0xFFA0
 #define SPR_CFG 0xFFC0
-#define PSG_XRAM 0xFE00 /* 64 byte, jämn adress, korsar ingen sidgräns */
+#define PSG_XRAM 0xFE00 /* 64 bytes, even address, doesn't cross a page boundary */
 
 #define COLS 40
 #define ROWS 30
 
-/* mode 2: 4 bitar per pixel, 8x8-tiles */
+/* mode 2: 4 bits per pixel, 8x8 tiles */
 #define MODE2_4BPP 0x02
 #define MODE2_8X8 0x00
 
-/* mode 5: sprites med palett, 4 bitar, 8x8 */
+/* mode 5: paletted sprites, 4 bits, 8x8 */
 #define MODE5_4BPP 0x02
 #define MODE5_8X8 0x00
 
-/* PSG: vågformer (övre halvan av release_wave) och gate-biten */
+/* PSG: waveforms (upper half of release_wave) and the gate bit */
 #define PSG_WAVE_SQUARE 0x10
 #define PSG_WAVE_SAWTOOTH 0x20
 #define PSG_WAVE_NOISE 0x40
 #define PSG_GATE 0x01
 
-/* PSG-kanalerna vi använder */
+/* The PSG channels we use */
 #define CH_EAT 0
 #define CH_STONE 1
 #define CH_OVER 2
 
-/* ---------- tile-nummer ---------- */
+/* ---------- tile numbers ---------- */
 #define T_HUD 0
 #define T_WALL 1
 #define T_BODY 2
 #define T_FOOD 3
-#define T_HEAD 4 /* 4=upp 5=höger 6=ner 7=vänster (samma ordning som dir) */
-#define T_OCC 8  /* ser ut som gräs, markerar cellen där huvudet är */
+#define T_HEAD 4 /* 4=up 5=right 6=down 7=left (same order as dir) */
+#define T_OCC 8  /* looks like grass, marks the cell where the head is */
 #define T_STONE 9
-#define T_BONUS 10 /* guldäpplet */
-#define T_GRASS 16 /* 16..47: gräs, GRASS_LAYOUTS * GRASS_BANDS stycken */
+#define T_BONUS 10 /* the golden apple */
+#define T_GRASS 16 /* 16..47: grass, GRASS_LAYOUTS * GRASS_BANDS of them */
 
-/* ---------- gräs och vind ---------- */
-#define GRASS_LAYOUTS 2 /* två olika strå-mönster så att gräset inte ser rutigt ut */
-#define GRASS_POSES 3   /* 0 = rakt, 1 = spetsen böjd, 2 = mer böjt */
-#define GRASS_BANDS 16  /* diagonala band; vinden flyttar sig ett band per steg */
-#define WIND_FRAMES 8   /* bildrutor per vindsteg (större = lugnare vind) */
+/* ---------- grass and wind ---------- */
+#define GRASS_LAYOUTS 2 /* two blade patterns so the grass doesn't look tiled */
+#define GRASS_POSES 3   /* 0 = straight, 1 = tip bent, 2 = bent more */
+#define GRASS_BANDS 16  /* diagonal bands; the wind moves one band per step */
+#define WIND_FRAMES 8   /* frames per wind step (higher = calmer wind) */
 
-/* ---------- USB HID-tangentkoder ---------- */
+/* ---------- USB HID key codes ---------- */
 #define KEY_A 0x04
 #define KEY_D 0x07
 #define KEY_ESC 0x29
 #define KEY_SPACE 0x2C
 #define KEY_P 0x13
 
-/* Byt plats på dessa två om du vill ha A = höger och D = vänster */
+/* Swap these two if you want A = right and D = left */
 #define KEY_TURN_LEFT KEY_A
 #define KEY_TURN_RIGHT KEY_D
 
-/* ---------- spelinställningar ---------- */
-#define NUM_STONES 8   /* stenar som finns från början */
-#define STONE_START 4  /* så många stenar från äpplen får ligga kvar i början */
-#define STONE_GROW 5   /* en sten till får ligga kvar för vart 5:e äpple */
-#define STONE_MAX 20   /* men aldrig fler än så här */
-#define STONE_EVERY 1  /* en sten per så här många äpplen */
-#define STEP_START 8   /* bildrutor per steg i början (lägre = snabbare) */
-#define STEP_MIN 4     /* snabbaste farten */
-#define SPEEDUP_EVERY 4 /* ett steg snabbare var 4:e äpple */
-#define BONUS_EVERY 5   /* ett guldäpple dyker upp efter vart 5:e äpple */
+/* ---------- game settings ---------- */
+#define NUM_STONES 8   /* stones on the board from the start */
+#define STONE_START 4  /* this many stones from apples may stay at first */
+#define STONE_GROW 5   /* one more stone may stay for every 5th apple */
+#define STONE_MAX 20   /* but never more than this */
+#define STONE_EVERY 1  /* one stone per this many apples */
+#define STEP_START 8   /* frames per step at the start (lower = faster) */
+#define STEP_MIN 4     /* top speed */
+#define SPEEDUP_EVERY 4 /* one step faster every 4th apple */
+#define BONUS_EVERY 5   /* a golden apple appears after every 5th apple */
 #define BONUS_POINTS 5
-#define BONUS_FRAMES 300 /* guldäpplet ligger kvar i 5 sekunder */
-#define BONUS_BLINK 90   /* och blinkar de sista 1,5 sekunderna */
-#define HISCORE_FILE "snake.hi" /* rekordet sparas på USB-disken */
+#define BONUS_FRAMES 300 /* the golden apple stays for 5 seconds */
+#define BONUS_BLINK 90   /* and blinks for the last 1.5 seconds */
+#define HISCORE_FILE "snake.hi" /* the high score is saved on the USB drive */
 #define MAXLEN 1024
 #define MASK (MAXLEN - 1)
 
-/* ---------- tillstånd ---------- */
+/* ---------- state ---------- */
 static unsigned char keys[32];
 static unsigned char sx[MAXLEN], sy[MAXLEN];
 static unsigned head, tail;
 static unsigned score;
-static unsigned best;   /* rekordet, läses från och sparas till HISCORE_FILE */
-static unsigned apples; /* vanliga äpplen i den här rundan, styr farten */
-static unsigned char tick; /* räknar bildrutor, styr animationerna */
+static unsigned best;   /* the high score, read from and saved to HISCORE_FILE */
+static unsigned apples; /* regular apples this round, controls the speed */
+static unsigned char tick; /* counts frames, drives the animations */
 
-/* guldäpplet: bonus_t är bildrutor kvar, 0 = inget guldäpple på planen */
+/* the golden apple: bonus_t is frames left, 0 = no golden apple on the board */
 static unsigned bonus_t;
 static unsigned char bonus_x, bonus_y;
 
-/* kö med de stenar som äpplen gett, äldst först (ringbuffert) */
+/* queue of the stones that apples have produced, oldest first (ring buffer) */
 static unsigned char stq_x[STONE_MAX], stq_y[STONE_MAX];
 static unsigned char stq_first, stq_count;
 
@@ -200,27 +205,27 @@ static const signed char dy[4] = {-1, 0, 1, 0};
 
 #define KEY_DOWN(code) ((keys[(code) >> 3] & (1 << ((code) & 7))) != 0)
 
-/* ---------- palett: 16 färger (R, G, B, 0-255) ---------- */
+/* ---------- palette: 16 colors (R, G, B, 0-255) ---------- */
 static const unsigned char pal[16][3] = {
-    {0, 0, 0},       /* 0  svart (HUD)          */
-    {36, 110, 44},   /* 1  gräs                 */
-    {62, 156, 62},   /* 2  grässtrå             */
-    {70, 70, 110},   /* 3  mur, mörk            */
-    {120, 120, 170}, /* 4  mur, ljus (murbruk)  */
-    {40, 190, 70},   /* 5  orm, kropp           */
-    {15, 100, 35},   /* 6  orm, kant + strårot  */
-    {120, 235, 100}, /* 7  orm, huvud/glans     */
-    {255, 255, 255}, /* 8  vitt (ögon)          */
-    {235, 185, 40},  /* 9  guld (pupill i spritepaletten, se load_palette) */
-    {225, 40, 40},   /* 10 äpple, rött          */
-    {140, 15, 25},   /* 11 äpple, mörkrött      */
-    {120, 80, 30},   /* 12 skaft, brunt         */
-    {255, 255, 255}, /* 13 äpplets glans (pulserar) */
-    {160, 160, 165}, /* 14 sten, ljus          */
-    {90, 90, 100}};  /* 15 sten, mörk          */
+    {0, 0, 0},       /* 0  black (HUD)          */
+    {36, 110, 44},   /* 1  grass                */
+    {62, 156, 62},   /* 2  grass blade          */
+    {70, 70, 110},   /* 3  wall, dark           */
+    {120, 120, 170}, /* 4  wall, light (mortar) */
+    {40, 190, 70},   /* 5  snake, body          */
+    {15, 100, 35},   /* 6  snake, edge + blade root */
+    {120, 235, 100}, /* 7  snake, head/shine    */
+    {255, 255, 255}, /* 8  white (eyes)         */
+    {235, 185, 40},  /* 9  gold (pupil in the sprite palette, see load_palette) */
+    {225, 40, 40},   /* 10 apple, red           */
+    {140, 15, 25},   /* 11 apple, dark red      */
+    {120, 80, 30},   /* 12 stem, brown          */
+    {255, 255, 255}, /* 13 apple glint (pulses) */
+    {160, 160, 165}, /* 14 stone, light         */
+    {90, 90, 100}};  /* 15 stone, dark          */
 
-/* ---------- tile-bilder som text: en siffra/bokstav per pixel ----------
-   0-9 och a-f är index i paletten ovan. */
+/* ---------- tile images as text: one digit/letter per pixel ----------
+   0-9 and a-f are indexes into the palette above. */
 static const char *const ART[T_HEAD][8] = {
     /* T_HUD */
     {"00000000", "00000000", "00000000", "00000000",
@@ -235,7 +240,7 @@ static const char *const ART[T_HEAD][8] = {
     {"111c1111", "11aaaa11", "1aadaaa1", "1aaaaaa1",
      "1aaaaaa1", "1baaaab1", "11bbbb11", "11111111"}};
 
-/* Huvudet ritas bara en gång (uppåt) och roteras sedan i koden */
+/* The head is drawn only once (facing up) and then rotated in code */
 static const char *const ART_HEAD_UP[8] = {
     "66666666", "67977976", "67877876", "67777776",
     "67777776", "67777776", "67777776", "66666666"};
@@ -248,9 +253,9 @@ static const char *const ART_STONE[8] = {
     "111ee111", "11eeeef1", "1eeeeeff", "1eeeeeff",
     "1eeeeeff", "1feeeeff", "11ffff11", "11111111"};
 
-/* Gräset ritas i koden som strån: kolumn, översta rad och längd i pixlar.
-   Spetsen är ljus (färg 2) och roten mörk (färg 6). Kolumnen får vara högst 6
-   eftersom spetsen böjs ett steg åt höger. */
+/* The grass is drawn in code as blades: column, top row and length in pixels.
+   The tip is light (color 2) and the root dark (color 6). The column may be
+   at most 6 since the tip bends one step to the right. */
 typedef struct
 {
     unsigned char col, row, len;
@@ -260,25 +265,25 @@ static const blade_t BLADES[GRASS_LAYOUTS][4] = {
     {{1, 1, 3}, {2, 2, 2}, {5, 4, 3}, {6, 5, 2}},
     {{3, 0, 3}, {4, 1, 2}, {0, 4, 3}, {6, 6, 2}}};
 
-/* En vindpust: hur mycket ett band böjer sig, steg för steg. Gräset böjs
-   mjukt, står böjt en stund och fjädrar sedan tillbaka. Nollorna är
-   lugnet mellan pustarna. */
+/* A gust of wind: how much a band bends, step by step. The grass bends
+   softly, stays bent for a while and then springs back. The zeros are the
+   calm between gusts. */
 static const unsigned char GUST[GRASS_BANDS] = {
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 2, 2, 2, 1};
 
-/* Färdigpackade gräsbilder (32 byte styck) och vilken pose varje band visar */
+/* Pre-packed grass images (32 bytes each) and which pose each band shows */
 static unsigned char grass_img[GRASS_LAYOUTS][GRASS_POSES][32];
 static unsigned char band_pose[GRASS_BANDS];
 static unsigned char wind_phase;
 
-/* ---------- Loggning till konsolen (stderr), utan printf ---------- */
+/* ---------- Logging to the console (stderr), without printf ---------- */
 
 static void log_str(const char *s)
 {
     write(STDERR_FILENO, s, strlen(s));
 }
 
-/* Skriver "ERROR: msg" på en egen rad */
+/* Writes "ERROR: msg" on a line of its own */
 static void log_error(const char *msg)
 {
     log_str("ERROR: ");
@@ -286,7 +291,7 @@ static void log_error(const char *msg)
     log_str("\r\n");
 }
 
-/* Skriver "label=n" på en egen rad, t.ex. log_num("score", score) */
+/* Writes "label=n" on a line of its own, e.g. log_num("score", score) */
 static void log_num(const char *label, unsigned n)
 {
     char buf[6];
@@ -304,7 +309,7 @@ static void log_num(const char *label, unsigned n)
     log_str("\r\n");
 }
 
-/* ---------- XRAM-hjälpfunktioner ---------- */
+/* ---------- XRAM helpers ---------- */
 
 static void xram_write(unsigned addr, const unsigned char *src, unsigned n)
 {
@@ -328,10 +333,10 @@ static unsigned char get_tile(unsigned char x, unsigned char y)
     return RIA.rw0;
 }
 
-/* Placerar en sprite (idx 0 = svans, 1 = huvud). x och y är pixlar på
-   canvasen (0..319, 0..239).
-   t är tile-numret vars bild används som sprite-bild (T_HEAD + riktning).
-   Spriten är ett mode5_sprite_t: x, y, bildpekare, palettpekare (8 byte). */
+/* Places a sprite (idx 0 = tail, 1 = head). x and y are pixels on the
+   canvas (0..319, 0..239).
+   t is the tile number whose image is used as the sprite image (T_HEAD + direction).
+   The sprite is a mode5_sprite_t: x, y, image pointer, palette pointer (8 bytes). */
 static void sprite_set(unsigned char idx, unsigned x, unsigned y, unsigned char t)
 {
     unsigned img = TILES_XRAM + (unsigned)t * 32;
@@ -363,9 +368,9 @@ static void wait_vsync(void)
         ;
 }
 
-/* ---------- tiles och palett till XRAM ---------- */
+/* ---------- tiles and palette to XRAM ---------- */
 
-/* Skriver en färg i en palett (RGB555 + alpha-bit 0x20 som gör färgen synlig) */
+/* Writes a color into a palette (RGB555 + alpha bit 0x20 that makes the color visible) */
 static void set_color_at(unsigned base, unsigned char i,
                          unsigned char r, unsigned char g, unsigned char b)
 {
@@ -374,7 +379,7 @@ static void set_color_at(unsigned base, unsigned char i,
                  (unsigned)(r >> 3) | 0x20;
     RIA.addr0 = base + (unsigned)i * 2;
     RIA.step0 = 1;
-    RIA.rw0 = c & 0xFF; /* låg byte först */
+    RIA.rw0 = c & 0xFF; /* low byte first */
     RIA.rw0 = c >> 8;
 }
 
@@ -389,11 +394,11 @@ static void load_palette(void)
     for (i = 0; i < 16; i++)
         set_color(i, pal[i][0], pal[i][1], pal[i][2]);
 
-    /* Spritepaletten är en kopia, men färg 0 är genomskinlig (alpha-bit av) */
+    /* The sprite palette is a copy, but color 0 is transparent (alpha bit off) */
     for (i = 1; i < 16; i++)
         set_color_at(SPR_PAL, i, pal[i][0], pal[i][1], pal[i][2]);
-    /* Färg 9 är pupillen i huvudspriten. Huvudet läggs aldrig i kartan, så
-       i tile-paletten kan samma nummer vara guld till guldäpplet. */
+    /* Color 9 is the pupil in the head sprite. The head is never put in the
+       map, so in the tile palette the same number can be gold for the golden apple. */
     set_color_at(SPR_PAL, 9, 10, 10, 10);
     RIA.addr0 = SPR_PAL;
     RIA.step0 = 1;
@@ -413,8 +418,8 @@ static void load_art(unsigned char px[8][8], const char *const *art)
         }
 }
 
-/* Packar 8x8 pixlar till 32 byte: två pixlar per byte, vänstra pixeln i
-   övre halvan av byten. Byt ordning här om bilderna ser spegelvända ut. */
+/* Packs 8x8 pixels into 32 bytes: two pixels per byte, the left pixel in
+   the upper half of the byte. Swap the order here if images look mirrored. */
 static void pack_tile(unsigned char *dst, unsigned char px[8][8])
 {
     unsigned char r, c;
@@ -430,8 +435,8 @@ static void store_tile(unsigned char id, unsigned char px[8][8])
     xram_write(TILES_XRAM + (unsigned)id * 32, buf, 32);
 }
 
-/* Ritar ett gräsmönster i en viss pose. Roten står still; vid pose 1 böjs
-   spetsen ett steg åt höger, vid pose 2 även pixeln under spetsen. */
+/* Draws a grass pattern in a given pose. The root stays put; in pose 1 the
+   tip bends one step to the right, in pose 2 the pixel below the tip too. */
 static void make_grass(unsigned char px[8][8], unsigned char layout, unsigned char pose)
 {
     const blade_t *b = BLADES[layout];
@@ -446,8 +451,8 @@ static void make_grass(unsigned char px[8][8], unsigned char layout, unsigned ch
     }
 }
 
-/* Vinden: ett steg av pusten som sveper diagonalt över planen. Bara de band
-   vars pose ändras skrivs om (4 band * 2 mönster = 256 byte per steg). */
+/* The wind: one step of the gust sweeping diagonally across the board. Only
+   the bands whose pose changes are rewritten (4 bands * 2 patterns = 256 bytes per step). */
 static void wind(void)
 {
     unsigned char b, p, l;
@@ -492,7 +497,7 @@ static void load_tiles(void)
     for (k = 0; k < 4; k++)
     {
         store_tile(T_HEAD + k, px);
-        rotate_cw(px); /* upp -> höger -> ner -> vänster */
+        rotate_cw(px); /* up -> right -> down -> left */
     }
 
     load_art(px, ART_STONE);
@@ -508,10 +513,10 @@ static void load_tiles(void)
             pack_tile(grass_img[t][p], px);
         }
 
-    /* T_OCC ser ut som rakt gräs (den ligger ändå under huvudspriten) */
+    /* T_OCC looks like straight grass (it is under the head sprite anyway) */
     xram_write(TILES_XRAM + T_OCC * 32, grass_img[0][0], 32);
 
-    memset(band_pose, 0xFF, sizeof band_pose); /* tvingar wind() att skriva alla band */
+    memset(band_pose, 0xFF, sizeof band_pose); /* forces wind() to write all bands */
     wind();
 }
 
@@ -519,8 +524,8 @@ static void load_tiles(void)
 
 static void video_init(void)
 {
-    /* mode2_config_t: x_wrap, y_wrap, x_pos, y_pos, bredd, höjd i tiles,
-       pekare till kartan, till paletten och till tile-bilderna */
+    /* mode2_config_t: x_wrap, y_wrap, x_pos, y_pos, width, height in tiles,
+       pointers to the map, the palette and the tile images */
     static const unsigned char cfg_tiles[16] = {
         0, 0,
         0, 0,
@@ -530,7 +535,7 @@ static void video_init(void)
         MAP_XRAM & 0xFF, MAP_XRAM >> 8,
         PAL_XRAM & 0xFF, PAL_XRAM >> 8,
         TILES_XRAM & 0xFF, TILES_XRAM >> 8};
-    /* mode1_config_t för en enda textrad. Palett och font 0xFFFF = inbyggda */
+    /* mode1_config_t for a single text row. Palette and font 0xFFFF = built-in */
     static const unsigned char cfg_text[16] = {
         0, 0,
         0, 0,
@@ -550,28 +555,28 @@ static void video_init(void)
     xram_write(CFG_TILES, cfg_tiles, 16);
     xram_write(CFG_TEXT, cfg_text, 16);
 
-    sprite_set(0, 320, 240, T_BODY); /* utanför canvasen = osynlig */
+    sprite_set(0, 320, 240, T_BODY); /* outside the canvas = invisible */
     sprite_set(1, 320, 240, T_HEAD);
 
-    /* tomma blanksteg på textraden */
+    /* blank spaces on the text row */
     RIA.addr0 = TEXT_XRAM;
     RIA.step0 = 1;
     for (i = 0; i < COLS; i++)
         RIA.rw0 = ' ';
 
-    /* plan 0: tile map över hela canvasen */
+    /* plane 0: tile map over the whole canvas */
     xreg_vga_mode(2, MODE2_4BPP | MODE2_8X8, CFG_TILES, 0);
-    /* plan 1: text på scanline 0-7 (översta raden) */
+    /* plane 1: text on scanlines 0-7 (the top row) */
     xreg_vga_mode(1, 0, CFG_TEXT, 1, 0, 8);
 
-    /* sprite-lagret ovanpå plan 0: 2 sprites, 8x8, 4 bitar */
+    /* the sprite layer on top of plane 0: 2 sprites, 8x8, 4 bits */
     xreg_vga_mode5(MODE5_4BPP | MODE5_8X8, SPR_CFG, 2, 0);
 
     xreg_ria_keyboard(KEYS_XRAM);
 }
 
-/* Samma position ger alltid samma tile. Bandet är diagonalen x + y, med ett
-   litet hack här och där så att vindfronten inte blir en rak linje. */
+/* The same position always gives the same tile. The band is the diagonal
+   x + y, with a small notch here and there so the wind front isn't a straight line. */
 static unsigned char grass_tile(unsigned char x, unsigned char y)
 {
     unsigned char layout = ((unsigned)x * 7 + (unsigned)y * 13) % 5 == 0;
@@ -603,8 +608,8 @@ static void draw_board(void)
         }
 }
 
-/* Text på rad 0, kolumn 1..19 (högst 19 tecken), resten blanksteg.
-   Kolumn 20..39 är poängen. */
+/* Text on row 0, columns 1..19 (at most 19 characters), the rest spaces.
+   Columns 20..39 are the score. */
 static void status(const char *s)
 {
     unsigned char x = 1;
@@ -622,15 +627,15 @@ static void status(const char *s)
     }
 }
 
-/* Skriver text där RIA.addr0 pekar just nu */
+/* Writes text wherever RIA.addr0 currently points */
 static void put_str(const char *s)
 {
     while (*s)
         RIA.rw0 = *s++;
 }
 
-/* Skriver n med 4 siffror vänsterställt, utfyllt med blanksteg.
-   Version utan sprintf() som inte finns i Picocomputer C17. */
+/* Writes n as 4 digits, left-aligned and padded with spaces.
+   Version without sprintf(), which isn't available in Picocomputer C17. */
 static void put_num4(unsigned n)
 {
     static const unsigned powers[4] = {1000, 100, 10, 1};
@@ -646,7 +651,7 @@ static void put_num4(unsigned n)
             n -= powers[i];
             ++d;
         }
-        if (d || started || i == 3) /* inga inledande nollor */
+        if (d || started || i == 3) /* no leading zeros */
         {
             RIA.rw0 = '0' + d;
             started = 1;
@@ -654,10 +659,10 @@ static void put_num4(unsigned n)
         }
     }
     for (; col < 4; col++)
-        RIA.rw0 = ' '; /* rensar gamla siffror */
+        RIA.rw0 = ' '; /* clears old digits */
 }
 
-/* "SCORE 1234 BEST 1234" i kolumn 20..39 */
+/* "SCORE 1234 BEST 1234" in columns 20..39 */
 static void show_score(void)
 {
     RIA.addr0 = TEXT_XRAM + 20;
@@ -668,14 +673,14 @@ static void show_score(void)
     put_num4(best);
 }
 
-/* ---------- rekordet på USB-disken ---------- */
+/* ---------- the high score on the USB drive ---------- */
 
 static void load_best(void)
 {
     unsigned char buf[2];
     int fd = open(HISCORE_FILE, O_RDONLY);
     if (fd < 0)
-        return; /* ingen fil än, då är rekordet 0 */
+        return; /* no file yet, so the high score is 0 */
     if (read(fd, buf, 2) == 2)
         best = buf[0] | ((unsigned)buf[1] << 8);
     close(fd);
@@ -707,18 +712,18 @@ static void show_score(void)
     RIA.step0 = 1;
     for (i = 0; buf[i]; i++)
         RIA.rw0 = buf[i];
-    for (; i < 10; i++) /* fyll ut till kolumn 39 så gamla siffror försvinner */
+    for (; i < 10; i++) /* pad to column 39 so old digits disappear */
         RIA.rw0 = ' ';
 }
 #endif
 
-/* Slumpar fram en gräsruta på planen */
+/* Picks a random grass cell on the board */
 static void random_grass(unsigned char *x, unsigned char *y)
 {
     do
     {
-        *x = 1 + rand() % 38; /* kolumn 1..38 */
-        *y = 2 + rand() % 27; /* rad 2..28    */
+        *x = 1 + rand() % 38; /* column 1..38 */
+        *y = 2 + rand() % 27; /* row 2..28    */
     } while (!is_grass(get_tile(*x, *y)));
 }
 
@@ -729,7 +734,7 @@ static void place_food(void)
     put_tile(fx, fy, T_FOOD);
 }
 
-/* Guldfärgen: blank när den blinkar av visar den gräsets färg */
+/* The gold color: when it blinks off it shows the grass color instead */
 static void bonus_color(unsigned char on)
 {
     if (on)
@@ -746,7 +751,7 @@ static void place_bonus(void)
     bonus_color(1);
 }
 
-/* Anropas varje bildruta i spelet: guldäpplet blinkar och försvinner */
+/* Called every frame during play: the golden apple blinks and disappears */
 static void bonus_update(void)
 {
     if (!bonus_t)
@@ -761,8 +766,8 @@ static void bonus_update(void)
         bonus_color(bonus_t & 8);
 }
 
-/* Slumpar ut stenar på ledigt gräs, men inte på ormens startsträcka
-   (rad 14-16, kolumn 16-32) så att man inte dör direkt. */
+/* Scatters stones on free grass, but not on the snake's starting stretch
+   (rows 14-16, columns 16-32) so you don't die right away. */
 static void place_stones(void)
 {
     unsigned char i, fx, fy;
@@ -778,14 +783,14 @@ static void place_stones(void)
     }
 }
 
-/* ---------- ljud (PSG) ---------- */
+/* ---------- sound (PSG) ---------- */
 
-/* Varje PSG-kanal är 8 byte i XRAM:
-   frekvens (Hz * 3, 2 byte), duty, attack, decay, release + vågform,
-   pan + gate, och en reserverad byte. */
+/* Each PSG channel is 8 bytes in XRAM:
+   frequency (Hz * 3, 2 bytes), duty, attack, decay, release + waveform,
+   pan + gate, and a reserved byte. */
 
-static unsigned char sfx_eat_t, sfx_stone_t, sfx_over_t; /* bildrutor kvar */
-static unsigned sfx_eat_hz; /* starttonen för äppelljudet */
+static unsigned char sfx_eat_t, sfx_stone_t, sfx_over_t; /* frames left */
+static unsigned sfx_eat_hz; /* starting pitch of the apple sound */
 
 static void sound_init(void)
 {
@@ -793,16 +798,16 @@ static void sound_init(void)
     RIA.addr0 = PSG_XRAM;
     RIA.step0 = 1;
     for (i = 0; i < 64; i++)
-        RIA.rw0 = 0; /* alla kanaler tysta (gate = 0) */
+        RIA.rw0 = 0; /* all channels silent (gate = 0) */
     xreg_ria_psg(PSG_XRAM);
 }
 
 static void sound_off(void)
 {
-    xreg_ria_psg(0xFFFF); /* stäng av PSG */
+    xreg_ria_psg(0xFFFF); /* turn off the PSG */
 }
 
-/* Startar en ton. Gate = 1 startar attack och decay. */
+/* Starts a note. Gate = 1 starts attack and decay. */
 static void psg_note(unsigned char ch, unsigned hz, unsigned char attack,
                      unsigned char decay, unsigned char wave_release)
 {
@@ -815,7 +820,7 @@ static void psg_note(unsigned char ch, unsigned hz, unsigned char attack,
     RIA.rw0 = attack;
     RIA.rw0 = decay;
     RIA.rw0 = wave_release;
-    RIA.rw0 = PSG_GATE; /* pan i mitten, gate på */
+    RIA.rw0 = PSG_GATE; /* pan in the middle, gate on */
 }
 
 static void psg_freq(unsigned char ch, unsigned hz)
@@ -831,10 +836,10 @@ static void psg_release(unsigned char ch)
 {
     RIA.addr0 = PSG_XRAM + (unsigned)ch * 8 + 6;
     RIA.step0 = 1;
-    RIA.rw0 = 0; /* gate av: tonen klingar ut (release) */
+    RIA.rw0 = 0; /* gate off: the note fades out (release) */
 }
 
-/* 440 Hz för vanliga äpplen, en oktav upp för guldäpplet */
+/* 440 Hz for regular apples, an octave up for the golden apple */
 static void sfx_eat(unsigned hz)
 {
     sfx_eat_hz = hz;
@@ -854,7 +859,7 @@ static void sfx_over(void)
     sfx_over_t = 45;
 }
 
-/* Anropas varje bildruta: glider tonhöjden och stänger gate när tiden gått */
+/* Called every frame: slides the pitch and closes the gate when time is up */
 static void sfx_update(void)
 {
     if (sfx_eat_t)
@@ -862,7 +867,7 @@ static void sfx_update(void)
         if (--sfx_eat_t == 0)
             psg_release(CH_EAT);
         else
-            psg_freq(CH_EAT, sfx_eat_hz + (8 - sfx_eat_t) * (sfx_eat_hz >> 3)); /* stiger */
+            psg_freq(CH_EAT, sfx_eat_hz + (8 - sfx_eat_t) * (sfx_eat_hz >> 3)); /* rising */
     }
     if (sfx_stone_t && --sfx_stone_t == 0)
         psg_release(CH_STONE);
@@ -871,12 +876,12 @@ static void sfx_update(void)
         if (--sfx_over_t == 0)
             psg_release(CH_OVER);
         else
-            psg_freq(CH_OVER, 330 - (45 - sfx_over_t) * 6); /* faller */
+            psg_freq(CH_OVER, 330 - (45 - sfx_over_t) * 6); /* falling */
     }
 }
 
-/* Lägger en sten i cellen (x,y). Är kön full blir den äldsta stenen gräs.
-   Kön får bli längre ju fler äpplen ormen har ätit. */
+/* Puts a stone in cell (x,y). If the queue is full the oldest stone turns
+   into grass. The queue may grow longer the more apples the snake has eaten. */
 static void drop_stone(unsigned char x, unsigned char y)
 {
     unsigned char i;
@@ -901,18 +906,18 @@ static void drop_stone(unsigned char x, unsigned char y)
 
 /* ---------- animation ---------- */
 
-/* Palettpuls: murbruket (färg 4) och äpplets glans (färg 13) */
+/* Palette pulse: the mortar (color 4) and the apple glint (color 13) */
 static void pulse(void)
 {
     unsigned char p = (tick >> 2) & 15; /* 0..15 */
     if (p > 7)
-        p = 15 - p; /* triangelvåg 0..7..0 */
+        p = 15 - p; /* triangle wave 0..7..0 */
 
     set_color(4, 120 + p * 16, 120 + p * 16, 170 + p * 10);
     set_color(13, 255, 255 - p * 20, 255 - p * 20);
 }
 
-/* Anropas en gång per bildruta, både på titelskärmen och i spelet */
+/* Called once per frame, both on the title screen and in the game */
 static void animate(void)
 {
     static unsigned char wind_t;
@@ -928,8 +933,8 @@ static void animate(void)
     }
 }
 
-/* Ormens färger (5 = kropp, 7 = huvud/glans) i båda paletterna.
-   flash = 1 gör ormen vit, 0 återställer. Färg 6 rörs inte, den är gräsrot. */
+/* The snake's colors (5 = body, 7 = head/shine) in both palettes.
+   flash = 1 makes the snake white, 0 restores it. Color 6 is left alone, it is the blade root. */
 static void snake_color(unsigned char flash)
 {
     unsigned char i;
@@ -948,7 +953,7 @@ static void snake_color(unsigned char flash)
     }
 }
 
-/* Flyttar tile-planet i sidled (x_pos i mode2-konfigurationen) */
+/* Moves the tile plane sideways (x_pos in the mode 2 config) */
 static void shake(signed char s)
 {
     RIA.addr0 = CFG_TILES + 2;
@@ -957,7 +962,7 @@ static void shake(signed char s)
     RIA.rw0 = s < 0 ? 0xFF : 0x00;
 }
 
-/* När ormen dör: planet skakar allt mindre och ormen blinkar en stund */
+/* When the snake dies: the board shakes less and less and the snake blinks for a while */
 static void game_over_fx(void)
 {
     unsigned char i, amp;
@@ -967,18 +972,18 @@ static void game_over_fx(void)
         wait_vsync();
         animate();
         snake_color((i >> 2) & 1);
-        amp = i < 16 ? 4 - (i >> 2) : 0; /* 4, 3, 2, 1, sedan stilla */
+        amp = i < 16 ? 4 - (i >> 2) : 0; /* 4, 3, 2, 1, then still */
         shake((i & 1) ? amp : -(signed char)amp);
     }
     snake_color(0);
     shake(0);
 }
 
-/* Pausar tills P trycks igen. Returnerar 0 om spelaren tryckte ESC.
-   Bakgrunden lever vidare men guldäpplets tid står still. */
+/* Pauses until P is pressed again. Returns 0 if the player pressed ESC.
+   The background keeps moving but the golden apple's timer stands still. */
 static unsigned char pause_game(void)
 {
-    unsigned char p, prev_p = 1; /* P är nedtryckt när vi kommer hit */
+    unsigned char p, prev_p = 1; /* P is held down when we get here */
 
     status("PAUSED  P = GO ON");
     for (;;)
@@ -997,24 +1002,24 @@ static unsigned char pause_game(void)
     return 1;
 }
 
-/* ---------- spelet ---------- */
+/* ---------- the game ---------- */
 
-/* Returnerar 0 om spelaren tryckte ESC, 1 om ormen dog */
+/* Returns 0 if the player pressed ESC, 1 if the snake died */
 static unsigned char play(void)
 {
-    unsigned char dir = 1; /* börja åt höger */
+    unsigned char dir = 1; /* start heading right */
     unsigned char vdir = 1;
     unsigned char turn = 0;
     unsigned char frames = 0;
-    unsigned char started = 0; /* huvudet glider först efter första steget */
+    unsigned char started = 0; /* the head only starts sliding after the first step */
     unsigned char a, d, p, prev_a, prev_d, prev_p;
     unsigned char hx, hy, nx, ny, t;
-    unsigned char vx = 20, vy = 15; /* cellen huvudspriten glider ifrån */
-    unsigned char tx = 18, ty = 15; /* cellen svansspriten glider ifrån */
-    signed char tdx = 0, tdy = 0;   /* svansens riktning (0 = står still) */
+    unsigned char vx = 20, vy = 15; /* the cell the head sprite slides from */
+    unsigned char tx = 18, ty = 15; /* the cell the tail sprite slides from */
+    signed char tdx = 0, tdy = 0;   /* the tail's direction (0 = standing still) */
     unsigned char off;
-    unsigned char pending = 0; /* stenar som ska landa bakom svansen */
-    unsigned char step = STEP_START; /* bildrutor per steg, minskar med farten */
+    unsigned char pending = 0; /* stones waiting to land behind the tail */
+    unsigned char step = STEP_START; /* frames per step, decreases as speed goes up */
 
     draw_board();
     status("A/D TURN  P PAUSE");
@@ -1026,7 +1031,7 @@ static unsigned char play(void)
     head = 3;
     put_tile(18, 15, T_BODY);
     put_tile(19, 15, T_BODY);
-    put_tile(20, 15, T_OCC); /* huvudets cell: ser ut som gräs men är upptagen */
+    put_tile(20, 15, T_OCC); /* the head's cell: looks like grass but is occupied */
     sprite_set(0, 18 * 8, 15 * 8, T_BODY);
     sprite_set(1, 20 * 8, 15 * 8, T_HEAD + dir);
 
@@ -1062,13 +1067,13 @@ static unsigned char play(void)
         a = KEY_DOWN(KEY_TURN_LEFT);
         d = KEY_DOWN(KEY_TURN_RIGHT);
         if (a && !prev_a && !turn)
-            turn = 3; /* dir + 3 = vänstersväng */
+            turn = 3; /* dir + 3 = left turn */
         if (d && !prev_d && !turn)
-            turn = 1; /* dir + 1 = högersväng   */
+            turn = 1; /* dir + 1 = right turn */
         prev_a = a;
         prev_d = d;
 
-        /* Spelets logik går i hela celler, ett steg var step:e bildruta */
+        /* The game logic works in whole cells, one step every step:th frame */
         if (++frames >= step)
         {
             frames = 0;
@@ -1081,11 +1086,11 @@ static unsigned char play(void)
             nx = hx + dx[dir];
             ny = hy + dy[dir];
 
-            /* båda spritarna har nu glidit klart; vänd huvudet åt nya hållet */
+            /* both sprites have finished sliding; turn the head to the new direction */
             sprite_set(0, (unsigned)(tx + tdx) * 8, (unsigned)(ty + tdy) * 8, T_BODY);
             sprite_set(1, (unsigned)hx * 8, (unsigned)hy * 8, T_HEAD + dir);
 
-            t = get_tile(nx, ny); /* vad finns i cellen framför huvudet? */
+            t = get_tile(nx, ny); /* what is in the cell in front of the head? */
             if (t == T_WALL || t == T_BODY || t == T_OCC || t == T_STONE)
             {
                 sfx_over();
@@ -1093,24 +1098,24 @@ static unsigned char play(void)
                 return 1;
             }
 
-            put_tile(hx, hy, T_BODY); /* gamla huvudcellen blir kropp */
+            put_tile(hx, hy, T_BODY); /* the old head cell becomes body */
             sx[head] = nx;
             sy[head] = ny;
             head = (head + 1) & MASK;
 
             if (t == T_FOOD || t == T_BONUS)
             {
-                /* Äpplet ligger kvar i kartan tills huvudspriten har glidit dit.
-                   Ormen växer: svansen står still. */
+                /* The apple stays in the map until the head sprite has slid onto it.
+                   The snake grows: the tail stands still. */
                 if (t == T_FOOD)
                 {
                     ++score;
                     ++apples;
                     sfx_eat(440);
                     if (apples % STONE_EVERY == 0)
-                        ++pending; /* landar när svansen nästa gång flyttar sig */
+                        ++pending; /* lands the next time the tail moves */
                     if (apples % SPEEDUP_EVERY == 0 && step > STEP_MIN)
-                        --step; /* snabbare! */
+                        --step; /* faster! */
                     place_food();
                     if (apples % BONUS_EVERY == 0 && !bonus_t)
                         place_bonus();
@@ -1131,16 +1136,16 @@ static unsigned char play(void)
             }
             else
             {
-                put_tile(nx, ny, T_OCC); /* huvudets nya cell */
+                put_tile(nx, ny, T_OCC); /* the head's new cell */
 
-                /* Svansen lämnar sin cell: kartan blir gräs direkt, men
-                   svansspriten glider från cellen mot nästa segment. */
+                /* The tail leaves its cell: the map turns to grass right away,
+                   but the tail sprite slides from the cell towards the next segment. */
                 tx = sx[tail];
                 ty = sy[tail];
                 put_tile(tx, ty, grass_tile(tx, ty));
                 if (pending)
                 {
-                    drop_stone(tx, ty); /* syns när svansspriten glider bort */
+                    drop_stone(tx, ty); /* shows up as the tail sprite slides away */
                     --pending;
                 }
                 tail = (tail + 1) & MASK;
@@ -1154,7 +1159,7 @@ static unsigned char play(void)
             started = 1;
         }
 
-        /* Varje bildruta: flytta spritarna en bit mot sina nästa celler */
+        /* Every frame: move the sprites a bit towards their next cells */
         off = (unsigned char)((unsigned)frames * 8 / step);
         sprite_set(0, (unsigned)(tx * 8 + tdx * off),
                    (unsigned)(ty * 8 + tdy * off), T_BODY);
@@ -1215,6 +1220,6 @@ int main(void)
         }
     }
 
-    sound_off(); /* tysta PSG:n innan vi lämnar spelet */
+    sound_off(); /* silence the PSG before leaving the game */
     return 0;
 }
