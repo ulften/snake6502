@@ -1,5 +1,15 @@
 /*
- * Snake för Picocomputer 6502 - steg 4: ljud (PSG)
+ * Snake för Picocomputer 6502 - steg 5: fart, rekord och guldäpple
+ *
+ * Nytt i steg 5:
+ *  - Ormen blir snabbare: ett steg tar STEP_START bildrutor från början och
+ *    en bildruta mindre var SPEEDUP_EVERY:e äpple, ner till STEP_MIN.
+ *  - Rekordet visas på poängraden och sparas i HISCORE_FILE på USB-disken.
+ *  - Guldäpplet: efter vart BONUS_EVERY:e äpple dyker det upp ett guldäpple
+ *    värt BONUS_POINTS. Det försvinner efter BONUS_FRAMES bildrutor och
+ *    blinkar (via paletten) innan dess.
+ *
+ * Steg 4: ljud (PSG)
  *
  * Nytt i steg 4: ljudgeneratorn PSG (8 kanaler) styrs genom 64 byte i XRAM,
  * precis som tangentbordet och spritelistan. Tre ljudeffekter:
@@ -38,8 +48,10 @@
  *    som upptagen. Äpplet ligger kvar i kartan tills huvudet har glidit dit.
  *
  * Från steg 2 (jämfört med steg 1):
- *  - Gräset vajar: tile-bilderna för gräs skrivs om i XRAM var 32:a bildruta.
- *    Eftersom kartan bara pekar på tile-numret ändras alla gräsrutor på en gång.
+ *  - Vind i gräset: planen är delad i 16 diagonala band med egna tile-nummer.
+ *    En vindpust sveper från band till band och stråna böjer sig när den
+ *    passerar. Eftersom kartan bara pekar på tile-numret räcker det att skriva
+ *    om tile-bilderna för de band som ändras, kartan ritas aldrig om.
  *  - Murarna glöder och äpplet blänker: vi ändrar enstaka färger i paletten
  *    (2 byte per färg). Hela skärmen byter färg utan att kartan ritas om.
  *
@@ -64,6 +76,7 @@
  */
 
 #include <rp6502.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -112,14 +125,20 @@
 
 /* ---------- tile-nummer ---------- */
 #define T_HUD 0
-#define T_GRASS_A 1
-#define T_GRASS_B 2
-#define T_WALL 3
-#define T_BODY 4
-#define T_FOOD 5
-#define T_HEAD 6 /* 6=upp 7=höger 8=ner 9=vänster (samma ordning som dir) */
-#define T_OCC 10 /* ser ut som gräs, markerar cellen där huvudet är */
-#define T_STONE 11
+#define T_WALL 1
+#define T_BODY 2
+#define T_FOOD 3
+#define T_HEAD 4 /* 4=upp 5=höger 6=ner 7=vänster (samma ordning som dir) */
+#define T_OCC 8  /* ser ut som gräs, markerar cellen där huvudet är */
+#define T_STONE 9
+#define T_BONUS 10 /* guldäpplet */
+#define T_GRASS 16 /* 16..47: gräs, GRASS_LAYOUTS * GRASS_BANDS stycken */
+
+/* ---------- gräs och vind ---------- */
+#define GRASS_LAYOUTS 2 /* två olika strå-mönster så att gräset inte ser rutigt ut */
+#define GRASS_POSES 3   /* 0 = rakt, 1 = spetsen böjd, 2 = mer böjt */
+#define GRASS_BANDS 16  /* diagonala band; vinden flyttar sig ett band per steg */
+#define WIND_FRAMES 8   /* bildrutor per vindsteg (större = lugnare vind) */
 
 /* ---------- USB HID-tangentkoder ---------- */
 #define KEY_A 0x04
@@ -135,7 +154,14 @@
 #define NUM_STONES 8   /* stenar som finns från början */
 #define STONE_MAX 6    /* högst så många stenar från äpplen åt gången */
 #define STONE_EVERY 1  /* en sten per så här många äpplen */
-#define STEP_FRAMES 8
+#define STEP_START 8   /* bildrutor per steg i början (lägre = snabbare) */
+#define STEP_MIN 4     /* snabbaste farten */
+#define SPEEDUP_EVERY 4 /* ett steg snabbare var 4:e äpple */
+#define BONUS_EVERY 5   /* ett guldäpple dyker upp efter vart 5:e äpple */
+#define BONUS_POINTS 5
+#define BONUS_FRAMES 300 /* guldäpplet ligger kvar i 5 sekunder */
+#define BONUS_BLINK 90   /* och blinkar de sista 1,5 sekunderna */
+#define HISCORE_FILE "snake.hi" /* rekordet sparas på USB-disken */
 #define MAXLEN 1024
 #define MASK (MAXLEN - 1)
 
@@ -144,7 +170,13 @@ static unsigned char keys[32];
 static unsigned char sx[MAXLEN], sy[MAXLEN];
 static unsigned head, tail;
 static unsigned score;
+static unsigned best;   /* rekordet, läses från och sparas till HISCORE_FILE */
+static unsigned apples; /* vanliga äpplen i den här rundan, styr farten */
 static unsigned char tick; /* räknar bildrutor, styr animationerna */
+
+/* guldäpplet: bonus_t är bildrutor kvar, 0 = inget guldäpple på planen */
+static unsigned bonus_t;
+static unsigned char bonus_x, bonus_y;
 
 /* kö med de stenar som äpplen gett, äldst först (ringbuffert) */
 static unsigned char stq_x[STONE_MAX], stq_y[STONE_MAX];
@@ -159,14 +191,14 @@ static const signed char dy[4] = {-1, 0, 1, 0};
 static const unsigned char pal[16][3] = {
     {0, 0, 0},       /* 0  svart (HUD)          */
     {36, 110, 44},   /* 1  gräs                 */
-    {56, 150, 60},   /* 2  gräs, ljusare tuss   */
+    {62, 156, 62},   /* 2  grässtrå             */
     {70, 70, 110},   /* 3  mur, mörk            */
     {120, 120, 170}, /* 4  mur, ljus (murbruk)  */
     {40, 190, 70},   /* 5  orm, kropp           */
-    {15, 100, 35},   /* 6  orm, kant            */
+    {15, 100, 35},   /* 6  orm, kant + strårot  */
     {120, 235, 100}, /* 7  orm, huvud/glans     */
     {255, 255, 255}, /* 8  vitt (ögon)          */
-    {10, 10, 10},    /* 9  nästan svart (pupill)*/
+    {235, 185, 40},  /* 9  guld (pupill i spritepaletten, se load_palette) */
     {225, 40, 40},   /* 10 äpple, rött          */
     {140, 15, 25},   /* 11 äpple, mörkrött      */
     {120, 80, 30},   /* 12 skaft, brunt         */
@@ -180,12 +212,6 @@ static const char *const ART[T_HEAD][8] = {
     /* T_HUD */
     {"00000000", "00000000", "00000000", "00000000",
      "00000000", "00000000", "00000000", "00000000"},
-    /* T_GRASS_A */
-    {"11111111", "11121111", "11111111", "11111111",
-     "11111121", "11111111", "12111111", "11111111"},
-    /* T_GRASS_B */
-    {"11111111", "11111111", "11112111", "21111111",
-     "11111111", "11111112", "11211111", "11111111"},
     /* T_WALL */
     {"44444444", "33343333", "33343333", "44444444",
      "33333433", "33333433", "44444444", "33343333"},
@@ -201,17 +227,36 @@ static const char *const ART_HEAD_UP[8] = {
     "66666666", "67977976", "67877876", "67777776",
     "67777776", "67777776", "67777776", "66666666"};
 
+static const char *const ART_BONUS[8] = {
+    "111c1111", "11999911", "199d9991", "19999991",
+    "19999991", "1c9999c1", "11cccc11", "11111111"};
+
 static const char *const ART_STONE[8] = {
     "111ee111", "11eeeef1", "1eeeeeff", "1eeeeeff",
     "1eeeeeff", "1feeeeff", "11ffff11", "11111111"};
 
-/* Gräsets andra bildruta: tuvorna har flyttat sig ett steg åt höger.
-   [0] hör till T_GRASS_A och [1] till T_GRASS_B. */
-static const char *const ART_GRASS_ALT[2][8] = {
-    {"11111111", "11112111", "11111111", "11111111",
-     "11111112", "11111111", "11211111", "11111111"},
-    {"11111111", "11111111", "11111211", "12111111",
-     "11111111", "21111111", "11121111", "11111111"}};
+/* Gräset ritas i koden som strån: kolumn, översta rad och längd i pixlar.
+   Spetsen är ljus (färg 2) och roten mörk (färg 6). Kolumnen får vara högst 6
+   eftersom spetsen böjs ett steg åt höger. */
+typedef struct
+{
+    unsigned char col, row, len;
+} blade_t;
+
+static const blade_t BLADES[GRASS_LAYOUTS][4] = {
+    {{1, 1, 3}, {2, 2, 2}, {5, 4, 3}, {6, 5, 2}},
+    {{3, 0, 3}, {4, 1, 2}, {0, 4, 3}, {6, 6, 2}}};
+
+/* En vindpust: hur mycket ett band böjer sig, steg för steg. Gräset böjs
+   mjukt, står böjt en stund och fjädrar sedan tillbaka. Nollorna är
+   lugnet mellan pustarna. */
+static const unsigned char GUST[GRASS_BANDS] = {
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 2, 2, 2, 1};
+
+/* Färdigpackade gräsbilder (32 byte styck) och vilken pose varje band visar */
+static unsigned char grass_img[GRASS_LAYOUTS][GRASS_POSES][32];
+static unsigned char band_pose[GRASS_BANDS];
+static unsigned char wind_phase;
 
 /* ---------- Loggning till konsolen (stderr), utan printf ---------- */
 
@@ -334,6 +379,9 @@ static void load_palette(void)
     /* Spritepaletten är en kopia, men färg 0 är genomskinlig (alpha-bit av) */
     for (i = 1; i < 16; i++)
         set_color_at(SPR_PAL, i, pal[i][0], pal[i][1], pal[i][2]);
+    /* Färg 9 är pupillen i huvudspriten. Huvudet läggs aldrig i kartan, så
+       i tile-paletten kan samma nummer vara guld till guldäpplet. */
+    set_color_at(SPR_PAL, 9, 10, 10, 10);
     RIA.addr0 = SPR_PAL;
     RIA.step0 = 1;
     RIA.rw0 = 0;
@@ -354,14 +402,54 @@ static void load_art(unsigned char px[8][8], const char *const *art)
 
 /* Packar 8x8 pixlar till 32 byte: två pixlar per byte, vänstra pixeln i
    övre halvan av byten. Byt ordning här om bilderna ser spegelvända ut. */
-static void store_tile(unsigned char id, unsigned char px[8][8])
+static void pack_tile(unsigned char *dst, unsigned char px[8][8])
 {
     unsigned char r, c;
-    RIA.addr0 = TILES_XRAM + (unsigned)id * 32;
-    RIA.step0 = 1;
     for (r = 0; r < 8; r++)
         for (c = 0; c < 8; c += 2)
-            RIA.rw0 = (px[r][c] << 4) | px[r][c + 1];
+            *dst++ = (px[r][c] << 4) | px[r][c + 1];
+}
+
+static void store_tile(unsigned char id, unsigned char px[8][8])
+{
+    unsigned char buf[32];
+    pack_tile(buf, px);
+    xram_write(TILES_XRAM + (unsigned)id * 32, buf, 32);
+}
+
+/* Ritar ett gräsmönster i en viss pose. Roten står still; vid pose 1 böjs
+   spetsen ett steg åt höger, vid pose 2 även pixeln under spetsen. */
+static void make_grass(unsigned char px[8][8], unsigned char layout, unsigned char pose)
+{
+    const blade_t *b = BLADES[layout];
+    unsigned char k, i, root;
+
+    memset(px, 1, 64);
+    for (k = 0; k < 4; k++, b++)
+    {
+        root = b->len - 1;
+        for (i = 0; i <= root; i++)
+            px[b->row + i][b->col + (i < root && pose > i)] = (i == root) ? 6 : 2;
+    }
+}
+
+/* Vinden: ett steg av pusten som sveper diagonalt över planen. Bara de band
+   vars pose ändras skrivs om (4 band * 2 mönster = 256 byte per steg). */
+static void wind(void)
+{
+    unsigned char b, p, l;
+
+    for (b = 0; b < GRASS_BANDS; b++)
+    {
+        p = GUST[(unsigned char)(wind_phase - b) & (GRASS_BANDS - 1)];
+        if (p == band_pose[b])
+            continue;
+        band_pose[b] = p;
+        for (l = 0; l < GRASS_LAYOUTS; l++)
+            xram_write(TILES_XRAM + (unsigned)(T_GRASS + l * GRASS_BANDS + b) * 32,
+                       grass_img[l][p], 32);
+    }
+    ++wind_phase;
 }
 
 static void rotate_cw(unsigned char px[8][8])
@@ -379,7 +467,7 @@ static void rotate_cw(unsigned char px[8][8])
 static void load_tiles(void)
 {
     unsigned char px[8][8];
-    unsigned char t, k;
+    unsigned char t, k, p;
 
     for (t = 0; t < T_HEAD; t++)
     {
@@ -394,11 +482,24 @@ static void load_tiles(void)
         rotate_cw(px); /* upp -> höger -> ner -> vänster */
     }
 
-    load_art(px, ART[T_GRASS_A]); /* T_OCC ser ut som gräs */
-    store_tile(T_OCC, px);
-
     load_art(px, ART_STONE);
     store_tile(T_STONE, px);
+
+    load_art(px, ART_BONUS);
+    store_tile(T_BONUS, px);
+
+    for (t = 0; t < GRASS_LAYOUTS; t++)
+        for (p = 0; p < GRASS_POSES; p++)
+        {
+            make_grass(px, t, p);
+            pack_tile(grass_img[t][p], px);
+        }
+
+    /* T_OCC ser ut som rakt gräs (den ligger ändå under huvudspriten) */
+    xram_write(TILES_XRAM + T_OCC * 32, grass_img[0][0], 32);
+
+    memset(band_pose, 0xFF, sizeof band_pose); /* tvingar wind() att skriva alla band */
+    wind();
 }
 
 /* ---------- video ---------- */
@@ -456,15 +557,18 @@ static void video_init(void)
     xreg_ria_keyboard(KEYS_XRAM);
 }
 
-/* Gräset varierar lite: samma position ger alltid samma tile */
+/* Samma position ger alltid samma tile. Bandet är diagonalen x + y, med ett
+   litet hack här och där så att vindfronten inte blir en rak linje. */
 static unsigned char grass_tile(unsigned char x, unsigned char y)
 {
-    return (((unsigned)x * 7 + (unsigned)y * 13) % 5 == 0) ? T_GRASS_B : T_GRASS_A;
+    unsigned char layout = ((unsigned)x * 7 + (unsigned)y * 13) % 5 == 0;
+    unsigned char band = x + y + (((unsigned)x * 11 + (unsigned)y * 3) % 3 == 0);
+    return T_GRASS + layout * GRASS_BANDS + (band & (GRASS_BANDS - 1));
 }
 
 static unsigned char is_grass(unsigned char t)
 {
-    return t == T_GRASS_A || t == T_GRASS_B;
+    return t >= T_GRASS && t < T_GRASS + GRASS_LAYOUTS * GRASS_BANDS;
 }
 
 static void draw_board(void)
@@ -486,7 +590,8 @@ static void draw_board(void)
         }
 }
 
-/* Text på rad 0, kolumn 1..28, resten blanksteg */
+/* Text på rad 0, kolumn 1..19 (högst 19 tecken), resten blanksteg.
+   Kolumn 20..39 är poängen. */
 static void status(const char *s)
 {
     unsigned char x = 1;
@@ -497,28 +602,29 @@ static void status(const char *s)
         RIA.rw0 = *s++;
         x++;
     }
-    while (x < 29)
+    while (x < 20)
     {
         RIA.rw0 = ' ';
         x++;
     }
 }
 
-static void show_score(void)
-{   // version utan sprintf() som inte finns i Picocomputer C17
+/* Skriver text där RIA.addr0 pekar just nu */
+static void put_str(const char *s)
+{
+    while (*s)
+        RIA.rw0 = *s++;
+}
 
+/* Skriver n med 4 siffror vänsterställt, utfyllt med blanksteg.
+   Version utan sprintf() som inte finns i Picocomputer C17. */
+static void put_num4(unsigned n)
+{
     static const unsigned powers[4] = {1000, 100, 10, 1};
-    static const char label[] = "SCORE ";
-    unsigned n = score;
     unsigned char i, d, started = 0, col = 0;
 
-    RIA.addr0 = TEXT_XRAM + 30;
-    RIA.step0 = 1;
-    for (i = 0; label[i]; i++)
-    {
-        RIA.rw0 = label[i];
-        ++col;
-    }
+    if (n > 9999)
+        n = 9999;
     for (i = 0; i < 4; i++)
     {
         d = 0;
@@ -534,8 +640,48 @@ static void show_score(void)
             ++col;
         }
     }
-    for (; col < 10; col++)
+    for (; col < 4; col++)
         RIA.rw0 = ' '; /* rensar gamla siffror */
+}
+
+/* "SCORE 1234 BEST 1234" i kolumn 20..39 */
+static void show_score(void)
+{
+    RIA.addr0 = TEXT_XRAM + 20;
+    RIA.step0 = 1;
+    put_str("SCORE ");
+    put_num4(score);
+    put_str(" BEST ");
+    put_num4(best);
+}
+
+/* ---------- rekordet på USB-disken ---------- */
+
+static void load_best(void)
+{
+    unsigned char buf[2];
+    int fd = open(HISCORE_FILE, O_RDONLY);
+    if (fd < 0)
+        return; /* ingen fil än, då är rekordet 0 */
+    if (read(fd, buf, 2) == 2)
+        best = buf[0] | ((unsigned)buf[1] << 8);
+    close(fd);
+}
+
+static void save_best(void)
+ {
+    unsigned char buf[2];
+    int fd = open(HISCORE_FILE, O_WRONLY | O_CREAT | O_TRUNC);
+    if (fd < 0)
+    {
+        log_error("could not open " HISCORE_FILE);
+        return;
+    }
+    buf[0] = best & 0xFF;
+    buf[1] = best >> 8;
+    if (write(fd, buf, 2) != 2)
+        log_error("could not write " HISCORE_FILE);
+    close(fd);
 }
 
 #if 0
@@ -553,15 +699,53 @@ static void show_score(void)
 }
 #endif
 
+/* Slumpar fram en gräsruta på planen */
+static void random_grass(unsigned char *x, unsigned char *y)
+{
+    do
+    {
+        *x = 1 + rand() % 38; /* kolumn 1..38 */
+        *y = 2 + rand() % 27; /* rad 2..28    */
+    } while (!is_grass(get_tile(*x, *y)));
+}
+
 static void place_food(void)
 {
     unsigned char fx, fy;
-    do
-    {
-        fx = 1 + rand() % 38; /* kolumn 1..38 */
-        fy = 2 + rand() % 27; /* rad 2..28    */
-    } while (!is_grass(get_tile(fx, fy)));
+    random_grass(&fx, &fy);
     put_tile(fx, fy, T_FOOD);
+}
+
+/* Guldfärgen: blank när den blinkar av visar den gräsets färg */
+static void bonus_color(unsigned char on)
+{
+    if (on)
+        set_color(9, pal[9][0], pal[9][1], pal[9][2]);
+    else
+        set_color(9, pal[1][0], pal[1][1], pal[1][2]);
+}
+
+static void place_bonus(void)
+{
+    random_grass(&bonus_x, &bonus_y);
+    put_tile(bonus_x, bonus_y, T_BONUS);
+    bonus_t = BONUS_FRAMES;
+    bonus_color(1);
+}
+
+/* Anropas varje bildruta i spelet: guldäpplet blinkar och försvinner */
+static void bonus_update(void)
+{
+    if (!bonus_t)
+        return;
+    if (--bonus_t == 0)
+    {
+        if (get_tile(bonus_x, bonus_y) == T_BONUS)
+            put_tile(bonus_x, bonus_y, grass_tile(bonus_x, bonus_y));
+        bonus_color(1);
+    }
+    else if (bonus_t <= BONUS_BLINK && (bonus_t & 7) == 0)
+        bonus_color(bonus_t & 8);
 }
 
 /* Slumpar ut stenar på ledigt gräs, men inte på ormens startsträcka
@@ -588,6 +772,7 @@ static void place_stones(void)
    pan + gate, och en reserverad byte. */
 
 static unsigned char sfx_eat_t, sfx_stone_t, sfx_over_t; /* bildrutor kvar */
+static unsigned sfx_eat_hz; /* starttonen för äppelljudet */
 
 static void sound_init(void)
 {
@@ -636,9 +821,11 @@ static void psg_release(unsigned char ch)
     RIA.rw0 = 0; /* gate av: tonen klingar ut (release) */
 }
 
-static void sfx_eat(void)
+/* 440 Hz för vanliga äpplen, en oktav upp för guldäpplet */
+static void sfx_eat(unsigned hz)
 {
-    psg_note(CH_EAT, 440, 0x00, 0x30, PSG_WAVE_SQUARE | 3);
+    sfx_eat_hz = hz;
+    psg_note(CH_EAT, hz, 0x00, 0x30, PSG_WAVE_SQUARE | 3);
     sfx_eat_t = 8;
 }
 
@@ -662,7 +849,7 @@ static void sfx_update(void)
         if (--sfx_eat_t == 0)
             psg_release(CH_EAT);
         else
-            psg_freq(CH_EAT, 440 + (8 - sfx_eat_t) * 60); /* stiger */
+            psg_freq(CH_EAT, sfx_eat_hz + (8 - sfx_eat_t) * (sfx_eat_hz >> 3)); /* stiger */
     }
     if (sfx_stone_t && --sfx_stone_t == 0)
         psg_release(CH_STONE);
@@ -697,19 +884,6 @@ static void drop_stone(unsigned char x, unsigned char y)
 
 /* ---------- animation ---------- */
 
-/* Gräset: skriv om tile-bilden för T_GRASS_A och T_GRASS_B.
-   phase 0 = ursprungsbilden, phase 1 = tuvorna ett steg åt höger. */
-static void sway(unsigned char phase)
-{
-    unsigned char px[8][8];
-
-    load_art(px, phase ? ART_GRASS_ALT[0] : ART[T_GRASS_A]);
-    store_tile(T_GRASS_A, px);
-    store_tile(T_OCC, px); /* T_OCC ska vaja som gräs */
-    load_art(px, phase ? ART_GRASS_ALT[1] : ART[T_GRASS_B]);
-    store_tile(T_GRASS_B, px);
-}
-
 /* Palettpuls: murbruket (färg 4) och äpplets glans (färg 13) */
 static void pulse(void)
 {
@@ -724,12 +898,17 @@ static void pulse(void)
 /* Anropas en gång per bildruta, både på titelskärmen och i spelet */
 static void animate(void)
 {
+    static unsigned char wind_t;
+
     ++tick;
     sfx_update();
     if ((tick & 3) == 0)
         pulse();
-    if ((tick & 31) == 0)
-        sway((tick >> 5) & 1);
+    if (++wind_t >= WIND_FRAMES)
+    {
+        wind_t = 0;
+        wind();
+    }
 }
 
 /* ---------- spelet ---------- */
@@ -749,9 +928,10 @@ static unsigned char play(void)
     signed char tdx = 0, tdy = 0;   /* svansens riktning (0 = står still) */
     unsigned char off;
     unsigned char pending = 0; /* stenar som ska landa bakom svansen */
+    unsigned char step = STEP_START; /* bildrutor per steg, minskar med farten */
 
     draw_board();
-    status("A/D = TURN   ESC = QUIT");
+    status("A/D TURN  ESC QUIT");
 
     head = tail = 0;
     sx[0] = 18; sy[0] = 15;
@@ -765,7 +945,10 @@ static unsigned char play(void)
     sprite_set(1, 20 * 8, 15 * 8, T_HEAD + dir);
 
     score = 0;
+    apples = 0;
     show_score();
+    bonus_t = 0;
+    bonus_color(1);
     stq_first = stq_count = 0;
     place_stones();
     place_food();
@@ -778,6 +961,7 @@ static unsigned char play(void)
     {
         wait_vsync();
         animate();
+        bonus_update();
         read_keys();
 
         if (KEY_DOWN(KEY_ESC))
@@ -792,8 +976,8 @@ static unsigned char play(void)
         prev_a = a;
         prev_d = d;
 
-        /* Spelets logik går i hela celler, ett steg var STEP_FRAMES bildruta */
-        if (++frames >= STEP_FRAMES)
+        /* Spelets logik går i hela celler, ett steg var step:e bildruta */
+        if (++frames >= step)
         {
             frames = 0;
 
@@ -821,17 +1005,32 @@ static unsigned char play(void)
             sy[head] = ny;
             head = (head + 1) & MASK;
 
-            if (t == T_FOOD)
+            if (t == T_FOOD || t == T_BONUS)
             {
                 /* Äpplet ligger kvar i kartan tills huvudspriten har glidit dit.
                    Ormen växer: svansen står still. */
-                ++score;
+                if (t == T_FOOD)
+                {
+                    ++score;
+                    ++apples;
+                    sfx_eat(440);
+                    if (apples % STONE_EVERY == 0)
+                        ++pending; /* landar när svansen nästa gång flyttar sig */
+                    if (apples % SPEEDUP_EVERY == 0 && step > STEP_MIN)
+                        --step; /* snabbare! */
+                    place_food();
+                    if (apples % BONUS_EVERY == 0 && !bonus_t)
+                        place_bonus();
+                }
+                else
+                {
+                    score += BONUS_POINTS;
+                    sfx_eat(880);
+                    bonus_t = 0;
+                    bonus_color(1);
+                }
                 show_score();
                 log_num("score", score);
-                sfx_eat();
-                if (score % STONE_EVERY == 0)
-                    ++pending; /* landar när svansen nästa gång flyttar sig */
-                place_food();
                 tx = sx[tail];
                 ty = sy[tail];
                 tdx = 0;
@@ -863,7 +1062,7 @@ static unsigned char play(void)
         }
 
         /* Varje bildruta: flytta spritarna en bit mot sina nästa celler */
-        off = (unsigned char)((unsigned)frames * 8 / STEP_FRAMES);
+        off = (unsigned char)((unsigned)frames * 8 / step);
         sprite_set(0, (unsigned)(tx * 8 + tdx * off),
                    (unsigned)(ty * 8 + tdy * off), T_BODY);
         if (!started)
@@ -893,10 +1092,14 @@ int main(void)
 {
     unsigned seed;
 
+    unsigned char alive;
+
     video_init();
     sound_init();
+    load_best();
     draw_board();
-    status("PRESS SPACE TO START");
+    status("SPACE = START");
+    show_score();
 
     seed = wait_for_space();
     if (seed)
@@ -904,10 +1107,17 @@ int main(void)
         srand(seed);
         for (;;)
         {
-            if (!play())
-                break;
-            status("GAME OVER  SPACE = AGAIN");
-            if (!wait_for_space())
+            alive = play();
+            if (score > best)
+            {
+                best = score;
+                save_best();
+                show_score();
+                status("NEW BEST!  SPACE");
+            }
+            else
+                status("GAME OVER  SPACE");
+            if (!alive || !wait_for_space())
                 break;
         }
     }
