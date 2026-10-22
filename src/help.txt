@@ -11,6 +11,8 @@ new walls and a short snake again.
   ARROWS go up, down, left or right
   P      pause / resume
   SPACE  start
-  ESC    end the round (press reset to leave the game)
+  ESC    end the round
+
+Ctrl-Alt-Del leaves the game and returns to the monitor.
 
 The high score is saved in snake.hi on the USB drive.

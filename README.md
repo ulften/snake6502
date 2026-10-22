@@ -19,6 +19,7 @@ stone or yourself.
 | P     | Pause / resume|
 | Space | Start         |
 | ESC   | End the round |
+| Ctrl-Alt-Del | Leave the game (back to the monitor) |
 
 There are two ways to steer, and you can mix them. A and D turn the
 snake left and right from the direction it is heading. The arrow keys

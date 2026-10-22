@@ -10,7 +10,8 @@
  *    turn relative to the head, so both kinds of players are happy.
  *  - ESC ends the round instead of quitting. In the browser there is no
  *    monitor to go back to (the emulator just stops), so the game never
- *    quits, the same everywhere. Leave it with reset.
+ *    quits, the same everywhere. Ctrl-Alt-Del on the keyboard returns to
+ *    the monitor.
  *
  * Step 6: growing stones, game over, pause
  *
@@ -571,7 +572,8 @@ static unsigned wait_for_space(void)
 }
 
 /* The game never quits: ESC only ends the round. In the browser there is no
-   monitor to go back to, so the same goes for every version. */
+   monitor to go back to, so the same goes for every version. On the
+   Picocomputer, Ctrl-Alt-Del stops the game and returns to the monitor. */
 int main(void)
 {
     video_init();
