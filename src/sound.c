@@ -33,11 +33,6 @@ void sound_init(void)
     xreg_ria_psg(XRAM_PSG);
 }
 
-void sound_off(void)
-{
-    xreg_ria_psg(0xFFFF); /* turn off the PSG */
-}
-
 /* Starts a note. Gate = 1 starts attack and decay. */
 static void psg_note(unsigned char ch, unsigned hz, unsigned char attack,
                      unsigned char decay, unsigned char wave_release)

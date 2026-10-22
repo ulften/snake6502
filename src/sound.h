@@ -4,7 +4,6 @@
 #define SOUND_H
 
 void sound_init(void);
-void sound_off(void);
 
 /* 440 Hz for regular apples, an octave up for the golden apple */
 void sfx_eat(unsigned hz);

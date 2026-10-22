@@ -8,6 +8,9 @@
  *    over, so every level is a little harder than the one before.
  *  - The arrow keys steer in absolute directions (up = up). A and D still
  *    turn relative to the head, so both kinds of players are happy.
+ *  - ESC ends the round instead of quitting. In the browser there is no
+ *    monitor to go back to (the emulator just stops), so the game never
+ *    quits, the same everywhere. Leave it with reset.
  *
  * Step 6: growing stones, game over, pause
  *
@@ -81,7 +84,7 @@
  *    redrawing the map.
  *
  * Controls:  A = turn left, D = turn right, arrows = go that way,
- *            P = pause, ESC = quit
+ *            P = pause, ESC = end the round
  *
  * The source files:
  *   main.c     the game: rules, the snake, apples and stones, the main loop
@@ -151,7 +154,7 @@ static const unsigned char arrow_key[4] = {KEY_ARROW_UP, KEY_ARROW_RIGHT,
                                            KEY_ARROW_DOWN, KEY_ARROW_LEFT};
 
 /* play_level() returns one of these */
-#define PLAY_QUIT 0
+#define PLAY_QUIT 0 /* the player pressed ESC */
 #define PLAY_DIED 1
 #define PLAY_CLEARED 2
 
@@ -533,9 +536,8 @@ static unsigned char level_up(void)
     return 1;
 }
 
-/* A whole game from level 1. Returns 0 if the player pressed ESC,
-   1 if the snake died. */
-static unsigned char play(void)
+/* A whole game from level 1, until the snake dies or the player presses ESC */
+static void play(void)
 {
     unsigned char r;
 
@@ -547,9 +549,9 @@ static unsigned char play(void)
     {
         r = play_level();
         if (r != PLAY_CLEARED)
-            return r;
+            return;
         if (!level_up())
-            return 0;
+            return;
         ++level;
     }
 }
@@ -562,20 +564,16 @@ static unsigned wait_for_space(void)
         wait_vsync();
         animate();
         read_keys();
-        if (KEY_DOWN(KEY_ESC))
-            return 0;
         if (KEY_DOWN(KEY_SPACE))
             return n;
         ++n;
     }
 }
 
+/* The game never quits: ESC only ends the round. In the browser there is no
+   monitor to go back to, so the same goes for every version. */
 int main(void)
 {
-    unsigned seed;
-
-    unsigned char alive;
-
     video_init();
     input_init();
     sound_init();
@@ -584,27 +582,19 @@ int main(void)
     status("SPACE = START");
     show_score(score, best);
 
-    seed = wait_for_space();
-    if (seed)
+    srand(wait_for_space()); /* the frames until SPACE make a random seed */
+    for (;;)
     {
-        srand(seed);
-        for (;;)
+        play();
+        if (score > best)
         {
-            alive = play();
-            if (score > best)
-            {
-                best = score;
-                save_best(best);
-                show_score(score, best);
-                status("NEW BEST!  SPACE");
-            }
-            else
-                status("GAME OVER  SPACE");
-            if (!alive || !wait_for_space())
-                break;
+            best = score;
+            save_best(best);
+            show_score(score, best);
+            status("NEW BEST!  SPACE");
         }
+        else
+            status("GAME OVER  SPACE");
+        wait_for_space();
     }
-
-    sound_off(); /* silence the PSG before leaving the game */
-    return 0;
 }

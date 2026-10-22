@@ -18,7 +18,7 @@ stone or yourself.
 | Arrows| Go that way   |
 | P     | Pause / resume|
 | Space | Start         |
-| ESC   | Quit          |
+| ESC   | End the round |
 
 There are two ways to steer, and you can mix them. A and D turn the
 snake left and right from the direction it is heading. The arrow keys
