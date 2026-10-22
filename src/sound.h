@@ -10,6 +10,7 @@ void sound_off(void);
 void sfx_eat(unsigned hz);
 void sfx_stone(void);
 void sfx_over(void);
+void sfx_level(void); /* four rising notes when a level is cleared */
 
 /* Called every frame: slides the pitch and closes the gate when time is up */
 void sfx_update(void);

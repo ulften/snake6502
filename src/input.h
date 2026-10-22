@@ -9,6 +9,10 @@
 #define KEY_ESC 0x29
 #define KEY_SPACE 0x2C
 #define KEY_P 0x13
+#define KEY_ARROW_RIGHT 0x4F
+#define KEY_ARROW_LEFT 0x50
+#define KEY_ARROW_DOWN 0x51
+#define KEY_ARROW_UP 0x52
 
 /* Swap these two if you want A = right and D = left */
 #define KEY_TURN_LEFT KEY_A

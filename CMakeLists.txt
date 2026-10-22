@@ -13,6 +13,7 @@ target_sources(snake PRIVATE
      src/main.c
      src/gfx.c
      src/grass.c
+     src/level.c
      src/hud.c
      src/sound.c
      src/input.c

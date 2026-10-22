@@ -1,5 +1,15 @@
 /*
- * Snake for the Picocomputer 6502 - step 6: growing stones, game over, pause
+ * Snake for the Picocomputer 6502 - step 7: levels and arrow keys
+ *
+ * New in step 7:
+ *  - Levels: after LEVEL_APPLES apples the level is cleared. The next level
+ *    has its own walls inside the board (level.c) and the snake starts over
+ *    at its starting length. The score, the speed and the stone limit carry
+ *    over, so every level is a little harder than the one before.
+ *  - The arrow keys steer in absolute directions (up = up). A and D still
+ *    turn relative to the head, so both kinds of players are happy.
+ *
+ * Step 6: growing stones, game over, pause
  *
  * New in step 6:
  *  - The number of stones from apples that may stay on the board starts at
@@ -70,12 +80,14 @@
  *    palette (2 bytes per color). The whole screen changes color without
  *    redrawing the map.
  *
- * Controls:  A = turn left, D = turn right, P = pause, ESC = quit
+ * Controls:  A = turn left, D = turn right, arrows = go that way,
+ *            P = pause, ESC = quit
  *
  * The source files:
  *   main.c     the game: rules, the snake, apples and stones, the main loop
  *   gfx.c      tile map, sprites, palette and tile images (see gfx.h)
  *   grass.c    the grass and the wind in it
+ *   level.c    the wall layouts of the levels
  *   hud.c      the text row with status and score
  *   sound.c    sound effects on the PSG
  *   input.c    the keyboard
@@ -90,6 +102,7 @@
 #include "hiscore.h"
 #include "hud.h"
 #include "input.h"
+#include "level.h"
 #include "log.h"
 #include "sound.h"
 
@@ -106,6 +119,8 @@
 #define BONUS_POINTS 5
 #define BONUS_FRAMES 300 /* the golden apple stays for 5 seconds */
 #define BONUS_BLINK 90   /* and blinks for the last 1.5 seconds */
+#define LEVEL_APPLES 15  /* apples to clear a level */
+#define LEVEL_PAUSE 60   /* frames between levels */
 #define MAXLEN 1024
 #define MASK (MAXLEN - 1)
 
@@ -115,6 +130,8 @@ static unsigned head, tail;
 static unsigned score;
 static unsigned best;   /* the high score, read from and saved to HISCORE_FILE */
 static unsigned apples; /* regular apples this round, controls the speed */
+static unsigned char step;  /* frames per step, decreases as speed goes up */
+static unsigned char level; /* 0 = the first level */
 static unsigned char tick; /* counts frames, drives the animations */
 
 /* the golden apple: bonus_t is frames left, 0 = no golden apple on the board */
@@ -127,6 +144,36 @@ static unsigned char stq_first, stq_count;
 
 static const signed char dx[4] = {0, 1, 0, -1};
 static const signed char dy[4] = {-1, 0, 1, 0};
+
+/* the arrow key for each direction, in the same order as dx/dy */
+static const unsigned char arrow_key[4] = {KEY_ARROW_UP, KEY_ARROW_RIGHT,
+                                           KEY_ARROW_DOWN, KEY_ARROW_LEFT};
+
+/* play_level() returns one of these */
+#define PLAY_QUIT 0
+#define PLAY_DIED 1
+#define PLAY_CLEARED 2
+
+/* "LEVEL 3  P PAUSE" on the status row */
+static void play_status(void)
+{
+    static char msg[] = "LEVEL 1   P PAUSE";
+    unsigned char n = level + 1;
+
+    if (n > 99)
+        n = 99;
+    if (n < 10)
+    {
+        msg[6] = '0' + n;
+        msg[7] = ' ';
+    }
+    else
+    {
+        msg[6] = '0' + n / 10;
+        msg[7] = '0' + n % 10;
+    }
+    status(msg);
+}
 
 /* ---------- apples and stones ---------- */
 
@@ -265,14 +312,15 @@ static unsigned char pause_game(void)
             break;
         prev_p = p;
     }
-    status("A/D TURN  P PAUSE");
+    play_status();
     return 1;
 }
 
 /* ---------- the game ---------- */
 
-/* Returns 0 if the player pressed ESC, 1 if the snake died */
-static unsigned char play(void)
+/* Plays the current level until the snake dies, the player quits or the
+   level is cleared. Returns PLAY_QUIT, PLAY_DIED or PLAY_CLEARED. */
+static unsigned char play_level(void)
 {
     unsigned char dir = 1; /* start heading right */
     unsigned char vdir = 1;
@@ -280,16 +328,18 @@ static unsigned char play(void)
     unsigned char frames = 0;
     unsigned char started = 0; /* the head only starts sliding after the first step */
     unsigned char a, d, p, prev_a, prev_d, prev_p;
+    unsigned char i, arrows, prev_arrows; /* bit i = the arrow for direction i */
     unsigned char hx, hy, nx, ny, t;
     unsigned char vx = 20, vy = 15; /* the cell the head sprite slides from */
     unsigned char tx = 18, ty = 15; /* the cell the tail sprite slides from */
     signed char tdx = 0, tdy = 0;   /* the tail's direction (0 = standing still) */
     unsigned char off;
     unsigned char pending = 0; /* stones waiting to land behind the tail */
-    unsigned char step = STEP_START; /* frames per step, decreases as speed goes up */
+    unsigned char eaten = 0;   /* regular apples on this level */
+    unsigned char cleared = 0; /* set when the last apple is eaten */
 
-    draw_board();
-    status("A/D TURN  P PAUSE");
+    draw_level(level);
+    play_status();
 
     head = tail = 0;
     sx[0] = 18; sy[0] = 15;
@@ -302,8 +352,6 @@ static unsigned char play(void)
     sprite_set(0, 18 * 8, 15 * 8, T_BODY);
     sprite_set(1, 20 * 8, 15 * 8, T_HEAD + dir);
 
-    score = 0;
-    apples = 0;
     show_score(score, best);
     bonus_t = 0;
     bonus_color(1);
@@ -315,6 +363,10 @@ static unsigned char play(void)
     prev_a = KEY_DOWN(KEY_TURN_LEFT);
     prev_d = KEY_DOWN(KEY_TURN_RIGHT);
     prev_p = KEY_DOWN(KEY_P);
+    prev_arrows = 0;
+    for (i = 0; i < 4; i++)
+        if (KEY_DOWN(arrow_key[i]))
+            prev_arrows |= 1 << i;
 
     for (;;)
     {
@@ -324,11 +376,11 @@ static unsigned char play(void)
         read_keys();
 
         if (KEY_DOWN(KEY_ESC))
-            return 0;
+            return PLAY_QUIT;
 
         p = KEY_DOWN(KEY_P);
         if (p && !prev_p && !pause_game())
-            return 0;
+            return PLAY_QUIT;
         prev_p = p;
 
         a = KEY_DOWN(KEY_TURN_LEFT);
@@ -339,6 +391,23 @@ static unsigned char play(void)
             turn = 1; /* dir + 1 = right turn */
         prev_a = a;
         prev_d = d;
+
+        /* An arrow becomes a left or right turn. The arrow for the way the
+           snake is already heading, or the way back, does nothing. */
+        arrows = 0;
+        for (i = 0; i < 4; i++)
+        {
+            if (!KEY_DOWN(arrow_key[i]))
+                continue;
+            arrows |= 1 << i;
+            if (!(prev_arrows & (1 << i)) && !turn)
+            {
+                t = (i - dir) & 3;
+                if (t == 1 || t == 3)
+                    turn = t;
+            }
+        }
+        prev_arrows = arrows;
 
         /* The game logic works in whole cells, one step every step:th frame */
         if (++frames >= step)
@@ -357,12 +426,16 @@ static unsigned char play(void)
             sprite_set(0, (unsigned)(tx + tdx) * 8, (unsigned)(ty + tdy) * 8, T_BODY);
             sprite_set(1, (unsigned)hx * 8, (unsigned)hy * 8, T_HEAD + dir);
 
+            /* the head has slid onto the last apple of the level */
+            if (cleared)
+                return PLAY_CLEARED;
+
             t = get_tile(nx, ny); /* what is in the cell in front of the head? */
             if (t == T_WALL || t == T_BODY || t == T_OCC || t == T_STONE)
             {
                 sfx_over();
                 game_over_fx();
-                return 1;
+                return PLAY_DIED;
             }
 
             put_tile(hx, hy, T_BODY); /* the old head cell becomes body */
@@ -378,6 +451,8 @@ static unsigned char play(void)
                 {
                     ++score;
                     ++apples;
+                    if (++eaten >= LEVEL_APPLES)
+                        cleared = 1;
                     sfx_eat(440);
                     if (apples % STONE_EVERY == 0)
                         ++pending; /* lands the next time the tail moves */
@@ -434,6 +509,46 @@ static unsigned char play(void)
             off = 0;
         sprite_set(1, (unsigned)(vx * 8 + dx[vdir] * off),
                    (unsigned)(vy * 8 + dy[vdir] * off), T_HEAD + vdir);
+    }
+}
+
+/* Between levels: a fanfare while the old board stays on screen.
+   Returns 0 if the player pressed ESC. */
+static unsigned char level_up(void)
+{
+    unsigned char i;
+
+    status("LEVEL CLEARED!");
+    sfx_level();
+    for (i = 0; i < LEVEL_PAUSE; i++)
+    {
+        wait_vsync();
+        animate();
+        read_keys();
+        if (KEY_DOWN(KEY_ESC))
+            return 0;
+    }
+    return 1;
+}
+
+/* A whole game from level 1. Returns 0 if the player pressed ESC,
+   1 if the snake died. */
+static unsigned char play(void)
+{
+    unsigned char r;
+
+    score = 0;
+    apples = 0;
+    step = STEP_START;
+    level = 0;
+    for (;;)
+    {
+        r = play_level();
+        if (r != PLAY_CLEARED)
+            return r;
+        if (!level_up())
+            return 0;
+        ++level;
     }
 }
 

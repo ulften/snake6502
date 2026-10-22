@@ -3,10 +3,12 @@ SNAKE for the Picocomputer 6502
 Steer the snake to the apples. Each apple makes it longer and leaves a
 stone behind. Don't hit a wall, a stone or yourself. The snake gets
 faster as you go, and a golden apple worth 5 points shows up now and
-then for a few seconds.
+then for a few seconds. Eat 15 apples to reach the next level, with
+new walls and a short snake again.
 
   A      turn left (relative to the head)
   D      turn right
+  ARROWS go up, down, left or right
   P      pause / resume
   SPACE  start
   ESC    quit

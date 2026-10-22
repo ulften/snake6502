@@ -15,9 +15,13 @@
 #define CH_EAT 0
 #define CH_STONE 1
 #define CH_OVER 2
+#define CH_LEVEL 3
 
-static unsigned char sfx_eat_t, sfx_stone_t, sfx_over_t; /* frames left */
+static unsigned char sfx_eat_t, sfx_stone_t, sfx_over_t, sfx_level_t; /* frames left */
 static unsigned sfx_eat_hz; /* starting pitch of the apple sound */
+
+/* C, E, G and the C above: a major chord played one note at a time */
+static const unsigned level_notes[4] = {523, 659, 784, 1047};
 
 void sound_init(void)
 {
@@ -85,8 +89,15 @@ void sfx_over(void)
     sfx_over_t = 45;
 }
 
+void sfx_level(void)
+{
+    sfx_level_t = 32; /* 4 notes, 8 frames each */
+}
+
 void sfx_update(void)
 {
+    unsigned char n;
+
     if (sfx_eat_t)
     {
         if (--sfx_eat_t == 0)
@@ -102,5 +113,15 @@ void sfx_update(void)
             psg_release(CH_OVER);
         else
             psg_freq(CH_OVER, 330 - (45 - sfx_over_t) * 6); /* falling */
+    }
+    if (sfx_level_t)
+    {
+        --sfx_level_t;
+        n = sfx_level_t & 7;
+        if (n == 7) /* frames 31, 23, 15 and 7: the next note */
+            psg_note(CH_LEVEL, level_notes[3 - (sfx_level_t >> 3)], 0x00, 0x30,
+                     PSG_WAVE_SQUARE | 3);
+        else if (n == 1) /* gate off just before, so the next note starts over */
+            psg_release(CH_LEVEL);
     }
 }

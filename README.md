@@ -15,17 +15,23 @@ stone or yourself.
 |-------|---------------|
 | A     | Turn left     |
 | D     | Turn right    |
+| Arrows| Go that way   |
 | P     | Pause / resume|
 | Space | Start         |
 | ESC   | Quit          |
 
-You steer relative to the snake's head: A and D turn it left and right
-from the direction it is heading.
+There are two ways to steer, and you can mix them. A and D turn the
+snake left and right from the direction it is heading. The arrow keys
+send it up, down, left or right on the screen (pressing the way back
+does nothing).
 
 - **It gets faster.** The snake speeds up every 4 apples until it reaches
   twice its starting speed.
 - **Stones build up.** Stones from apples stay on the board for a while.
   At first only 4 stay, but the limit grows as you eat more apples.
+- **Levels.** Eat 15 apples to clear a level. The next level has new
+  walls (bars, a box, pillars, then the open board again) and the snake
+  starts over at its starting length, but the score and speed carry over.
 - **Golden apple.** After every 5th apple a golden apple appears for 5
   seconds. It is worth 5 points and blinks before it disappears.
 - **High score.** Your best score is shown on the top row and saved in
@@ -65,7 +71,7 @@ The game ends up in `build/cc65/release/snake.rp6502`.
 
 The game itself is in [src/main.c](src/main.c), and the comment at the top
 explains how it was built up step by step and lists the other source files
-(graphics, grass, sound, keyboard, score row, high score, logging). The XRAM
+(graphics, grass, levels, sound, keyboard, score row, high score, logging). The XRAM
 map is in [src/xram.h](src/xram.h). In short:
 
 - **Graphics:** a 40x30 tile map (VGA mode 2, 8x8 tiles, 16 colors), a text
