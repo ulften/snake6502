@@ -121,6 +121,7 @@
 #define BONUS_BLINK 90   /* and blinks for the last 1.5 seconds */
 #define LEVEL_APPLES 15  /* apples to clear a level */
 #define LEVEL_PAUSE 60   /* frames between levels */
+#define START_LEVEL 0    /* for testing: 3 starts on the pillars */
 #define MAXLEN 1024
 #define MASK (MAXLEN - 1)
 
@@ -540,7 +541,7 @@ static unsigned char play(void)
     score = 0;
     apples = 0;
     step = STEP_START;
-    level = 0;
+    level = START_LEVEL;
     for (;;)
     {
         r = play_level();
