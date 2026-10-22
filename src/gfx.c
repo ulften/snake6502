@@ -49,6 +49,14 @@ static const char *const ART_BONUS[8] = {
     "111c1111", "11999911", "199d9991", "19999991",
     "19999991", "1c9999c1", "11cccc11", "11111111"};
 
+/* Rows of round leaf clumps in the light grass green, lighter than the
+   grass so the hedge stands out, with black gaps between them. Colors 0, 2
+   and 6 never change, so the hedge stays calm while the outer walls glow.
+   No border, so hedge tiles grow together. */
+static const char *const ART_HEDGE[8] = {
+    "62266226", "22222222", "22262226", "06600660",
+    "26622662", "22222222", "26222622", "60066006"};
+
 static const char *const ART_STONE[8] = {
     "111ee111", "11eeeef1", "1eeeeeff", "1eeeeeff",
     "1eeeeeff", "1feeeeff", "11ffff11", "11111111"};
@@ -202,6 +210,9 @@ static void load_tiles(void)
     load_art(px, ART_BONUS);
     store_tile(T_BONUS, px);
 
+    load_art(px, ART_HEDGE);
+    store_tile(T_HEDGE, px);
+
     grass_init();
 }
 
@@ -281,11 +292,14 @@ void draw_board(void)
 
 void pulse(unsigned char tick)
 {
-    unsigned char p = (tick >> 2) & 15; /* 0..15 */
+    unsigned char p = (tick >> 2) & 15; /* 0..15, around once a second */
+    unsigned char w = (tick >> 3) & 15; /* 0..15, half as fast for the walls */
     if (p > 7)
         p = 15 - p; /* triangle wave 0..7..0 */
+    if (w > 7)
+        w = 15 - w;
 
-    set_color(4, 120 + p * 16, 120 + p * 16, 170 + p * 10);
+    set_color(4, 130 + w * 8, 130 + w * 8, 175 + w * 5); /* a calm glow */
     set_color(13, 255, 255 - p * 20, 255 - p * 20);
 }
 

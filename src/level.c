@@ -1,5 +1,8 @@
 /* Levels: each level has its own wall layout inside the board
  *
+ * The walls inside the board are hedges (T_HEDGE). They are just as deadly
+ * as the outer walls but don't glow.
+ *
  * The inside of the board is columns 1..38 and rows 2..28. The snake starts
  * on row 15 at columns 18-20 heading right, so no layout may put a wall on
  * rows 14-16 between columns 16 and 32.
@@ -13,14 +16,14 @@
 #include "gfx.h"
 #include "level.h"
 
-/* Fills the rectangle (x0,y0)-(x1,y1), corners included, with wall */
+/* Fills the rectangle (x0,y0)-(x1,y1), corners included, with hedge */
 static void wall_rect(unsigned char x0, unsigned char y0,
                       unsigned char x1, unsigned char y1)
 {
     unsigned char x, y;
     for (y = y0; y <= y1; y++)
         for (x = x0; x <= x1; x++)
-            put_tile(x, y, T_WALL);
+            put_tile(x, y, T_HEDGE);
 }
 
 void draw_level(unsigned char n)

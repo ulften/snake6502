@@ -22,6 +22,7 @@
 #define T_OCC 8  /* looks like grass, marks the cell where the head is */
 #define T_STONE 9
 #define T_BONUS 10 /* the golden apple */
+#define T_HEDGE 11 /* the walls inside the board on later levels */
 #define T_GRASS 16 /* 16..47: grass, GRASS_LAYOUTS * GRASS_BANDS of them */
 
 /* Sets up the canvas, palette, tile images and the planes */

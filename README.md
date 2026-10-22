@@ -30,7 +30,7 @@ does nothing).
 - **Stones build up.** Stones from apples stay on the board for a while.
   At first only 4 stay, but the limit grows as you eat more apples.
 - **Levels.** Eat 15 apples to clear a level. The next level has new
-  walls (bars, a box, pillars, then the open board again) and the snake
+  hedges (bars, a box, pillars, then the open board again) and the snake
   starts over at its starting length, but the score and speed carry over.
 - **Golden apple.** After every 5th apple a golden apple appears for 5
   seconds. It is worth 5 points and blinks before it disappears.

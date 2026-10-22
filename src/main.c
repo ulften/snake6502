@@ -432,7 +432,8 @@ static unsigned char play_level(void)
                 return PLAY_CLEARED;
 
             t = get_tile(nx, ny); /* what is in the cell in front of the head? */
-            if (t == T_WALL || t == T_BODY || t == T_OCC || t == T_STONE)
+            if (t == T_WALL || t == T_HEDGE || t == T_BODY || t == T_OCC ||
+                t == T_STONE)
             {
                 sfx_over();
                 game_over_fx();
